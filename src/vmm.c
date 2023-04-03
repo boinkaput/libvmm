@@ -215,7 +215,8 @@ bool guest_init_images(void) {
     return true;
 }
 
-void guest_start(void) {
+void arch_guest_init(void) {
+#if defined(CONFIG_ARCH_AARCH64)
     // Initialise the virtual GIC driver
     vgic_init();
 #if defined(GIC_V2)
@@ -246,6 +247,7 @@ void guest_start(void) {
     // Just in case there is already an interrupt available to handle, we ack it here.
     // @ivanv: not sure if this is necessary? is this the right place to do this
     sel4cp_irq_ack(SERIAL_IRQ_CH);
+
     seL4_UserContext regs = {0};
     regs.x0 = GUEST_DTB_VADDR;
     regs.spsr = 5; // PMODE_EL1h
@@ -265,9 +267,32 @@ void guest_start(void) {
     // Set the PC to the kernel image's entry point and start the thread.
     LOG_VMM("starting guest at 0x%lx, DTB at 0x%lx, initial RAM disk at 0x%lx\n",
         regs.pc, regs.x0, GUEST_INIT_RAM_DISK_VADDR);
-    seL4_UserContext read_regs = {0};
-    seL4_TCB_ReadRegisters(BASE_VM_TCB_CAP + VM_ID, false, 0, SEL4_USER_CONTEXT_SIZE, &read_regs);
     sel4cp_vm_restart(VM_ID, regs.pc);
+#endif
+#if defined(CONFIG_ARCH_RISCV)
+    struct linux_image_header *image_header = (struct linux_image_header *) &_guest_kernel_image;
+    uint64_t kernel_image_vaddr = guest_ram_vaddr + image_header->text_offset;
+    seL4_UserContext regs = {0};
+    regs.a0 = GUEST_DTB_VADDR;
+    regs.pc = kernel_image_vaddr;
+    // Set all the TCB registers
+    seL4_Error err = seL4_TCB_WriteRegisters(
+        BASE_VM_TCB_CAP + VM_ID,
+        false, // We'll explcitly start the guest below rather than in this call
+        0, // No flags
+        sizeof(seL4_UserContext), // Writing to x0, pc, and spsr // @ivanv: for some reason having the number of registers here does not work... (in this case 2)
+        &regs
+    );
+    assert(!err);
+    // Set the PC to the kernel image's entry point and start the thread.
+    LOG_VMM("starting guest at 0x%lx, DTB at 0x%lx, initial RAM disk at 0x%lx\n",
+        regs.pc, regs.a0, GUEST_INIT_RAM_DISK_VADDR);
+    sel4cp_vm_restart(VM_ID, regs.pc);
+#endif
+}
+
+void guest_start(void) {
+    arch_guest_init();
 }
 
 #define SCTLR_EL1_UCI       (1 << 26)     /* Enable EL0 access to DC CVAU, DC CIVAC, DC CVAC,
@@ -357,12 +382,11 @@ init(void)
     guest_start();
 }
 
-int restart = 1;
-
 void
 notified(sel4cp_channel ch)
 {
     switch (ch) {
+#if defined(CONFIG_ARCH_AARCH64)
         case SERIAL_IRQ_CH: {
             bool success = vgic_inject_irq(VCPU_ID, SERIAL_IRQ);
             if (!success) {
@@ -370,6 +394,7 @@ notified(sel4cp_channel ch)
             }
             break;
         }
+#endif
         default:
             printf("Unexpected channel, ch: 0x%lx\n", ch);
     }

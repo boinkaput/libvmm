@@ -4,6 +4,6 @@ make -B \
 	SEL4CP_CONFIG=debug \
 	SEL4CP_BOARD=qemu_riscv_virt_hyp \
 	SYSTEM=simple.system \
-    ARCH=riscv64 \
+    	ARCH=riscv64 \
 	-j
 
