@@ -38,7 +38,7 @@ bool check_magic(struct linux_image_header *h) {
     // version 0.2 of the image header, all other versions (at the time of
     // writing) use the "magic2" field.
     if (linux_image_header_major_version(h) == 0 &&
-            linux_image_header_minor_version(h)) {
+            linux_image_header_minor_version(h) == 2) {
         return h->magic == LINUX_IMAGE_MAGIC;
     } else {
         return h->magic2 == LINUX_IMAGE_MAGIC_2;
