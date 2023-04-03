@@ -34,7 +34,7 @@ size_t linux_image_header_minor_version(struct linux_image_header *h) {
 
 bool check_magic(struct linux_image_header *h) {
     // Unfortunately even the Linux kernel developers could not make reading a
-    // magic number a simple operation. The "magic" field is deprecated for
+    // magic number a simple operation. The "magic" field is deprecated as of
     // version 0.2 of the image header, all other versions (at the time of
     // writing) use the "magic2" field.
     if (linux_image_header_major_version(h) == 0 &&
