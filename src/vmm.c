@@ -401,7 +401,7 @@ notified(sel4cp_channel ch)
 }
 
 void
-fault(sel4cp_vm vm, sel4cp_msginfo msginfo)
+fault(sel4cp_id vm, sel4cp_msginfo msginfo)
 {
     // This is the primary fault handler for the guest, all faults that come
     // from seL4 regarding the guest will need to be handled here.
