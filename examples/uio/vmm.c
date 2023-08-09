@@ -54,8 +54,10 @@
 
 #if defined(BOARD_qemu_arm_virt_hyp)
 #define SERIAL_IRQ 33
+#define ETH_IRQ 79
 #elif defined(BOARD_odroidc2_hyp) || defined(BOARD_odroidc4_hyp)
 #define SERIAL_IRQ 225
+#define ETH_IRQ 40
 #elif defined(BOARD_rpi4b_hyp)
 #define SERIAL_IRQ 57
 #elif defined(BOARD_imx8mm_evk_hyp)
@@ -76,6 +78,7 @@ extern char _guest_initrd_image_end[];
 /* seL4CP will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
+/* @tim: Does the VMM actually need these addresses? */
 uintptr_t uio_map0;
 uintptr_t uio_map1;
 uintptr_t uio_map2;
@@ -87,6 +90,7 @@ uintptr_t uio_map2;
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
 
+/* @tim: Do we (or should we) be using these? */ 
 #define UIO_SIZE        0x1000
 #define UIO_0_START     0xffe50000
 
@@ -148,27 +152,32 @@ void init(void) {
     }
 
 #if defined(DRIVER_GUEST_VMM)
-    register_passthrough_irq(225, 1);
-    register_passthrough_irq(222, 2);
-    register_passthrough_irq(223, 3);
-    register_passthrough_irq(232, 4);
+    register_passthrough_irq(SERIAL_IRQ, 1);
+    // @tim: ETH_IRQ ID was 5, will need to update in odroid system file
+    register_passthrough_irq(ETH_IRQ, 2);
 
-    register_passthrough_irq(40, 5);
-    register_passthrough_irq(35, 15);
+    // register_passthrough_irq(225, 1);
+    // register_passthrough_irq(222, 2);
+    // register_passthrough_irq(223, 3);
+    // register_passthrough_irq(232, 4);
 
-    register_passthrough_irq(96, 6);
-    register_passthrough_irq(192, 7);
-    register_passthrough_irq(193, 8);
-    register_passthrough_irq(194, 9);
-    register_passthrough_irq(53, 10);
-    register_passthrough_irq(228, 11);
-    register_passthrough_irq(63, 12);
-    register_passthrough_irq(62, 13);
-    register_passthrough_irq(48, 16);
-    register_passthrough_irq(89, 14);
-    // @jade: this should not be necessary. Investigation required.
-    register_passthrough_irq(5, 17);
+    // register_passthrough_irq(40, 5);
+    // register_passthrough_irq(35, 15);
 
+    // register_passthrough_irq(96, 6);
+    // register_passthrough_irq(192, 7);
+    // register_passthrough_irq(193, 8);
+    // register_passthrough_irq(194, 9);
+    // register_passthrough_irq(53, 10);
+    // register_passthrough_irq(228, 11);
+    // register_passthrough_irq(63, 12);
+    // register_passthrough_irq(62, 13);
+    // register_passthrough_irq(48, 16);
+    // register_passthrough_irq(89, 14);
+    // // @jade: this should not be necessary. Investigation required.
+    // register_passthrough_irq(5, 17);
+
+    // @tim: 42 comes from DTS
     vgic_register_irq(GUEST_VCPU_ID, 42, &uio_ack, NULL);
 #endif
 

@@ -61,7 +61,8 @@ SYSTEM_DESCRIPTION := board/$(BOARD)/uio.system
 IMAGE_DIR := board/$(BOARD)
 LINUX := $(IMAGE_DIR)/linux
 BASE_DTS := $(IMAGE_DIR)/linux.dts
-CLIENT_OVERLAY_DTS := $(IMAGE_DIR)/client_guest_overlay.dts
+UIO_DTS := $(IMAGE_DIR)/uio.dts
+ETH_DTS := $(IMAGE_DIR)/eth.dts
 CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
@@ -112,9 +113,9 @@ simulate: all
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-$(CLIENT_DTB): $(BASE_DTS) $(CLIENT_OVERLAY_DTS)
-	cat $^ > $(BUILD_DIR)/client_guest_combined.dts
-	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_guest_combined.dts > $@
+$(CLIENT_DTB): $(BASE_DTS)
+	../../scripts/dtscat $^ > $(BUILD_DIR)/client_guest.dts
+	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_guest.dts > $@
 
 $(BUILD_DIR)/client_guest_images.o: package_guest_images.S $(LINUX) $(CLIENT_DTB) $(INITRD)
 	$(CC) -c -g3 -x assembler-with-cpp \
@@ -123,8 +124,9 @@ $(BUILD_DIR)/client_guest_images.o: package_guest_images.S $(LINUX) $(CLIENT_DTB
 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
 					$< -o $@
 
-$(DRIVER_DTB): $(BASE_DTS)
-	$(DTC) -q -I dts -O dtb $< > $@
+$(DRIVER_DTB): $(BASE_DTS) $(UIO_DTS) $(ETH_DTS)
+	../../scripts/dtscat $^ > $(BUILD_DIR)/driver_guest.dts
+	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/driver_guest.dts > $@
 
 $(BUILD_DIR)/driver_guest_images.o: package_guest_images.S $(LINUX) $(DRIVER_DTB) $(INITRD)
 	$(CC) -c -g3 -x assembler-with-cpp \
