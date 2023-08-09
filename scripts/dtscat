@@ -2,11 +2,11 @@
 
 usage() {
     cmd=$(basename "$0")
-    echo "usage: $cmd <base_dts> <overlay1> [<overlay2> ... <overlayN>]" >&2
+    echo "usage: $cmd <base_dts> [<overlay1> ... <overlayN>]" >&2
     exit 1
 }
 
-if [ "$#" -lt 2 ]
+if [ "$#" -lt 1 ]
 then
     usage
 fi
@@ -42,6 +42,6 @@ do
     fi
 done
 
-cat "$BASE" "$OVERLAYS"
+cat "$BASE" $OVERLAYS
 
 
