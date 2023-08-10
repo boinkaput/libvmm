@@ -7,6 +7,7 @@ const build_dir = "zig-out";
 const bin_dir = "zig-out/bin";
 
 fn concatStr(strings: []const []const u8) []const u8 {
+    // @restructure I think we can do this better with allocPrint
     return std.mem.concat(gpa, u8, strings) catch "";
 }
 
@@ -139,6 +140,7 @@ pub fn build(b: *std.Build) void {
     // For actually compiling the DTS into a DTB
     const dts_path = concatStr(&[_][]const u8{ "board/", sel4cp_board, "/linux.dts" });
     // @ivanv: find a better place, need to figure out zig build scripts more
+    // @restructure
     const dtb_image_path = "linux.dtb";
     const dtc_command = b.addSystemCommand(&[_][]const u8{
         "dtc", "-I", "dts", "-O", "dtb", dts_path, "-o", dtb_image_path
