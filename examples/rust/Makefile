@@ -23,11 +23,12 @@ QEMU := qemu-system-aarch64
 DTC := dtc
 CC := clang
 LD := ld.lld
+AR := aarch64-none-elf-ar
 SEL4CP_TOOL ?= $(SEL4CP_SDK)/bin/sel4cp
 
 BOARD_DIR := $(SEL4CP_SDK)/board/$(BOARD)/$(CONFIG)
 LIBVMM := ../../src
-SYSTEM_DESCRIPTION := board/$(BOARD)/rust_vmm.system
+SYSTEM_DESCRIPTION := rust_vmm.system
 
 IMAGE_DIR := images
 LINUX := $(IMAGE_DIR)/linux
@@ -74,9 +75,7 @@ CFLAGS := -mstrict-align \
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lsel4cp -Tsel4cp.ld
 
-
-### Rust specific options
-RUST_TARGET_PATH := .
+RUST_TARGET_PATH := support/targets
 RUST_SEL4CP_TARGET := aarch64-sel4cp-minimal
 TARGET_DIR := $(BUILD_DIR)/target
 
@@ -85,14 +84,14 @@ RUST_ENV := \
 	SEL4_INCLUDE_DIRS=$(abspath $(BOARD_DIR)/include)
 
 RUST_OPTIONS := \
+	-Z unstable-options \
 	-Z build-std=core,alloc,compiler_builtins \
 	-Z build-std-features=compiler-builtins-mem \
+	-Z bindeps \
+	--release \
 	--target $(RUST_SEL4CP_TARGET) \
 	--target-dir $(abspath $(TARGET_DIR)) \
-	--out-dir $(abspath $(BUILD_DIR))
-
-###
-
+	--out-dir $(abspath $(BUILD_DIR)) \
 
 all: directories $(IMAGE_FILE)
 
@@ -126,11 +125,11 @@ $(BUILD_DIR)/%.o: $(LIBVMM)/arch/aarch64/vgic/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/libvmm.a: $(addprefix $(BUILD_DIR)/, $(LIBVMM_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+	$(AR) -rv $@ $^
 
-$(BUILD_DIR)/vmm.elf: src/vmm.rs $(BUILD_DIR)/libvmm.a
+$(BUILD_DIR)/vmm.elf: src/vmm.rs $(BUILD_DIR)/libvmm.a $(LINUX) $(INITRD) $(DTB)
 	$(RUST_ENV) \
-		cargo build $(RUST_BUILD_OPTIONS)
+		cargo build $(RUST_OPTIONS)
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION) $(IMAGE_DIR)
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION)
 	$(SEL4CP_TOOL) $(SYSTEM_DESCRIPTION) --search-path $(BUILD_DIR) $(IMAGE_DIR) --board $(BOARD) --config $(CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
