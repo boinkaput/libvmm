@@ -29,19 +29,19 @@
  */
 #define GUEST_RAM_SIZE 0x10000000
 
-#if defined(BOARD_qemu_arm_virt_hyp)
+#if defined(BOARD_qemu_arm_virt)
 #define GUEST_DTB_VADDR 0x4f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
-#elif defined(BOARD_rpi4b_hyp)
+#elif defined(BOARD_rpi4b)
 #define GUEST_DTB_VADDR 0x2e000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
-#elif defined(BOARD_odroidc2_hyp)
+#elif defined(BOARD_odroidc2)
 #define GUEST_DTB_VADDR 0x2f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
-#elif defined(BOARD_odroidc4_hyp)
+#elif defined(BOARD_odroidc4)
 #define GUEST_DTB_VADDR 0x2f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
-#elif defined(BOARD_imx8mm_evk_hyp)
+#elif defined(BOARD_imx8mm_evk)
 #define GUEST_DTB_VADDR 0x4f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
 #else
@@ -52,15 +52,15 @@
  * across platforms. */
 #define SERIAL_IRQ_CH 1
 
-#if defined(BOARD_qemu_arm_virt_hyp)
+#if defined(BOARD_qemu_arm_virt)
 #define SERIAL_IRQ 33
 #define ETH_IRQ 79
-#elif defined(BOARD_odroidc2_hyp) || defined(BOARD_odroidc4_hyp)
+#elif defined(BOARD_odroidc2) || defined(BOARD_odroidc4)
 #define SERIAL_IRQ 225
 #define ETH_IRQ 40
-#elif defined(BOARD_rpi4b_hyp)
+#elif defined(BOARD_rpi4b)
 #define SERIAL_IRQ 57
-#elif defined(BOARD_imx8mm_evk_hyp)
+#elif defined(BOARD_imx8mm_evk)
 #define SERIAL_IRQ 79
 #else
 #error Need to define serial interrupt
@@ -156,29 +156,34 @@ void init(void) {
     // @tim: ETH_IRQ ID was 5, will need to update in odroid system file
     register_passthrough_irq(ETH_IRQ, 2);
 
-    // register_passthrough_irq(225, 1);
-    // register_passthrough_irq(222, 2);
-    // register_passthrough_irq(223, 3);
-    // register_passthrough_irq(232, 4);
 
-    // register_passthrough_irq(40, 5);
-    // register_passthrough_irq(35, 15);
+#if defined(BOARD_odroidc4)
+    register_passthrough_irq(225, 1);
+    register_passthrough_irq(222, 5);   // @tim: jade had as 2
+    register_passthrough_irq(223, 3);
+    register_passthrough_irq(232, 4);
 
-    // register_passthrough_irq(96, 6);
-    // register_passthrough_irq(192, 7);
-    // register_passthrough_irq(193, 8);
-    // register_passthrough_irq(194, 9);
-    // register_passthrough_irq(53, 10);
-    // register_passthrough_irq(228, 11);
-    // register_passthrough_irq(63, 12);
-    // register_passthrough_irq(62, 13);
-    // register_passthrough_irq(48, 16);
-    // register_passthrough_irq(89, 14);
-    // // @jade: this should not be necessary. Investigation required.
-    // register_passthrough_irq(5, 17);
+    register_passthrough_irq(40, 2);   // @tim: jade had as 5
+    register_passthrough_irq(35, 15);
+
+    register_passthrough_irq(96, 6);
+    register_passthrough_irq(192, 7);
+    register_passthrough_irq(193, 8);
+    register_passthrough_irq(194, 9);
+    register_passthrough_irq(53, 10);
+    register_passthrough_irq(228, 11);
+    register_passthrough_irq(63, 12);
+    register_passthrough_irq(62, 13);
+    register_passthrough_irq(48, 16);
+    register_passthrough_irq(89, 14);
+    // @jade: this should not be necessary. Investigation required.
+    register_passthrough_irq(5, 17);
+#endif
 
     // @tim: 42 comes from DTS
     vgic_register_irq(GUEST_VCPU_ID, 42, &uio_ack, NULL);
+    vgic_register_irq(GUEST_VCPU_ID, 43, &uio_ack, NULL);
+    vgic_register_irq(GUEST_VCPU_ID, 44, &uio_ack, NULL);
 #endif
 
     /* Finally start the guest */

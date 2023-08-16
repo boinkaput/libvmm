@@ -61,8 +61,12 @@ SYSTEM_DESCRIPTION := board/$(BOARD)/uio.system
 IMAGE_DIR := board/$(BOARD)
 LINUX := $(IMAGE_DIR)/linux
 BASE_DTS := $(IMAGE_DIR)/linux.dts
+# @tim: figure out best way to specify DTS overlays
 UIO_DTS := $(IMAGE_DIR)/uio.dts
 ETH_DTS := $(IMAGE_DIR)/eth.dts
+DISBALE_HW_DTS := $(IMAGE_DIR)/disable_hw.dts
+CLIENT_DTS_OVERLAYS := $(DISBALE_HW_DTS) 
+DRIVER_DTS_OVERLAYS := $(UIO_DTS) $(ETH_DTS)
 CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
@@ -108,12 +112,14 @@ simulate: all
 			-serial mon:stdio \
 			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
 			-m size=2G \
-			-nographic
+			-nographic \
+			-netdev user,id=mynet0 \
+			-device virtio-net-device,netdev=mynet0,mac=52:55:00:d1:55:01
 
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-$(CLIENT_DTB): $(BASE_DTS)
+$(CLIENT_DTB): $(BASE_DTS) $(CLIENT_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/client_guest.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_guest.dts > $@
 
@@ -124,7 +130,7 @@ $(BUILD_DIR)/client_guest_images.o: package_guest_images.S $(LINUX) $(CLIENT_DTB
 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
 					$< -o $@
 
-$(DRIVER_DTB): $(BASE_DTS) $(UIO_DTS) $(ETH_DTS)
+$(DRIVER_DTB): $(BASE_DTS) $(DRIVER_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/driver_guest.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/driver_guest.dts > $@
 

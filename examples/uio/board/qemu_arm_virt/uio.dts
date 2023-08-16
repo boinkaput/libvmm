@@ -1,0 +1,80 @@
+
+/ {
+	// uio {
+	// 	compatible = "generic-uio\0uio";
+	// 	reg = <0x00 0x30000000 0x00 0x2000 0x00 0x30002000 0x00 0x2000 0x00 0x30004000 0x00 0x2000>;
+	// 	interrupts = <0x00 0x0a 0x04>;
+	// };
+
+/**
+Every node in the tree that represents a device is required to have the 
+`compatible` property. `compatible` is the key an operating system uses to 
+decide which device driver to bind to a device.
+
+`compatible` is a list of strings. The first string in the list specifies the 
+exact device that the node represents in the form "<manufacturer>,<model>". 
+The following strings represent other devices that the device is compatible with.
+
+For example, the Freescale MPC8349 System on Chip (SoC) has a serial device 
+which implements the National Semiconductor ns16550 register interface. The 
+compatible property for the MPC8349 serial device should therefore be: 
+compatible = "fsl,mpc8349-uart", "ns16550". In this case, fsl,mpc8349-uart 
+specifies the exact device, and ns16550 states that it is register-level 
+compatible with a National Semiconductor 16550 UART.
+
+Linux device tree binaries are typically compiled from a hierarchy of DTS 
+source files using `include` directives.  To simplify our manipulation of 
+these device trees we take the flattened DTB and decompile it into a single
+DTS.  Note the `compatible` property is a list of comma-separated strings.
+The decompiler in these instances doesn't return the original format, but 
+rather a single string that is still comma-separated for the original strings,
+but null-separated between those strings.  For example:
+
+`"a,b", "c,d"` -> `a,b\0c,d`
+
+In the case of UIO, we can nominate any compatible string, but convention
+is to typically use `generic-uio`.  Whatever string is used then needs to 
+be matched in the Linux bootargs to associate it with the generic platform 
+driver.  This can be found in the "chosen" -> "bootargs" element.  For example:
+
+```
+chosen {
+		bootargs = "uio_pdrv_genirq.of_id=generic-uio";
+	};
+```
+
+At boot time, when Linux processes these arguments, it will look for a (driver)
+module named `uio_pdrv_genirq`, then set its Open Firmware id, `of_id`, 
+attribute to the given value, in this example `generic-uio`.  This allows it 
+then be associated with each device in the Device Tree that is specified as 
+compatible with `generic-uio`.  Consequently the `uio_pdrv_genirq` is bound 
+to each of these devices.
+
+The Open Firmware working group developed the Device Tree specification.
+
+Refs:
+https://elinux.org/Device_Tree_Usage#Understanding_the_compatible_Property
+https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842482/Device+Tree+Tips#DeviceTreeTips-8.1KernelBootargs
+*/
+
+	uio0 {
+		// compatible = "generic-uio\0uio";
+		compatible = "generic-uio";
+		reg = <0x00 0x30000000 0x00 0x2000>;
+		interrupts = <0x00 0x0a 0x04>;
+	};
+
+	uio1 {
+		// compatible = "generic-uio\0uio";
+		compatible = "generic-uio", "uio";
+		reg = <0x00 0x30002000 0x00 0x2000>;
+		interrupts = <0x00 0x0b 0x04>;
+	};
+
+	uio2 {
+		// compatible = "generic-uio\0uio";
+		compatible = "generic-uio", "uio";
+		reg = <0x00 0x30004000 0x00 0x2000>;
+		interrupts = <0x00 0x0c 0x04>;
+	};
+};
