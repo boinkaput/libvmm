@@ -19,21 +19,21 @@
         TypeError: '<' not supported between instances of 'SysMemoryRegion' and 'SysMemoryRegion'
         ```
     -->
-    <memory_region name="serial" size="0x1_000" phys_addr="0xff803000" />
+    <!-- <memory_region name="serial" size="0x1_000" phys_addr="0xff803000" /> -->
     <!-- this bus contains the serial device -->
-    <!-- <memory_region name="bus2" size="0x100000" phys_addr="0xff800000" /> -->
+    <memory_region name="bus2" size="0x100000" phys_addr="0xff800000" />
     <memory_region name="gic_vcpu" size="0x1_000" phys_addr="0xffc06000" />
     
     <!-- 
         Don't need any of the below for this example, but mapping them in
         out of convenience to avoid cleaning up DTS to prevent VMM faults.
      -->
-    <!-- <memory_region name="bus1" size="0x200000" phys_addr="0xff600000" />
+    <memory_region name="bus1" size="0x200000" phys_addr="0xff600000" />
     <memory_region name="bus3" size="0x100000" phys_addr="0xffd00000" />
 
     <memory_region name="usb" size="0x1000" phys_addr="0xffe09000" />
     <memory_region name="usb1" size="0x40000" phys_addr="0xff400000" />
-    <memory_region name="usb2" size="0x100000" phys_addr="0xff500000" /> -->
+    <memory_region name="usb2" size="0x100000" phys_addr="0xff500000" />
 
     <memory_region name="sd" size="0x1000" phys_addr="0xffe05000" />
     <memory_region name="mmc" size="0x1000" phys_addr="0xffe07000" />
@@ -47,19 +47,19 @@
         <virtual_machine name="linux" id="0">
             <map mr="guest_ram" vaddr="0x20000000" perms="rwx" />
             <map mr="ethernet" vaddr="0xff3f0000" perms="rw" cached="false" />
-            <map mr="serial" vaddr="0xff803000" perms="rw" cached="false" />
-            <!-- <map mr="bus2" vaddr="0xff800000" perms="rw" cached="false" /> -->
+            <!-- <map mr="serial" vaddr="0xff803000" perms="rw" cached="false" /> -->
+            <map mr="bus2" vaddr="0xff800000" perms="rw" cached="false" />
             <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" cached="false" />
 
             <!-- 
                 Don't care about this stuff, but would require cleaning out DTS to
                 prevent VMM faults. 
             -->
-            <!-- <map mr="bus1" vaddr="0xff600000" perms="rw" cached="false" />
+            <map mr="bus1" vaddr="0xff600000" perms="rw" cached="false" />
             <map mr="bus3" vaddr="0xffd00000" perms="rw" cached="false" />
             <map mr="usb" vaddr="0xffe09000" perms="rw" cached="false" />
             <map mr="usb1" vaddr="0xff400000" perms="rw" cached="false" />
-            <map mr="usb2" vaddr="0xff500000" perms="rw" cached="false" /> -->
+            <map mr="usb2" vaddr="0xff500000" perms="rw" cached="false" />
             <map mr="sd" vaddr="0xffe05000" perms="rw" cached="false" />
             <map mr="mmc" vaddr="0xffe07000" perms="rw" cached="false" />
             <map mr="gpu" vaddr="0xffe40000" perms="rw" cached="false" />
