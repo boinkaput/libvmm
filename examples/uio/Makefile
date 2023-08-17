@@ -69,7 +69,7 @@ CLIENT_DTS_OVERLAYS := $(DISBALE_HW_DTS)
 DRIVER_DTS_OVERLAYS := $(UIO_DTS) $(ETH_DTS)
 CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
-INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
+INITRD := $(IMAGE_DIR)/rootfs_nfs.cpio.gz
 
 ELFS := client_guest_vmm.elf driver_guest_vmm.elf
 

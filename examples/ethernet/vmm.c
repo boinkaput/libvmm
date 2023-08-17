@@ -25,6 +25,9 @@
 #if defined(BOARD_qemu_arm_virt)
 #define GUEST_DTB_VADDR 0x4f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
+#elif defined(BOARD_odroidc4)
+#define GUEST_DTB_VADDR 0x2f000000
+#define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
 #else
 #error Need to define VM image address and DTB address
 #endif
@@ -37,6 +40,9 @@
 #if defined(BOARD_qemu_arm_virt)
 #define SERIAL_IRQ 33
 #define ETHERNET_IRQ 79
+#elif defined(BOARD_odroidc2) || defined(BOARD_odroidc4)
+#define SERIAL_IRQ 225
+#define ETHERNET_IRQ 40
 #else
 #error Need to define serial interrupt
 #endif

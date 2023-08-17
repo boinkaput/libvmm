@@ -44,6 +44,10 @@
             <map mr="uio_map0" vaddr="0x30000000" perms="rw" cached="false" />
             <map mr="uio_map1" vaddr="0x30002000" perms="rw" cached="false" />
             <map mr="uio_map2" vaddr="0x30004000" perms="rw" cached="false" />
+            <!-- 
+                We're mapping in the VCPU interface where the guest expects to 
+                find the real CPU interface.
+             -->
             <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" cached="false" />
 
             <!-- <map mr="bus1" vaddr="0xff600000" perms="rw" cached="false" /> -->
