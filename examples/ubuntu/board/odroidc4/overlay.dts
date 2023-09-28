@@ -1,0 +1,18 @@
+/ {
+
+    /delete-node/ memory;
+    /delete-node/ chosen;
+
+    memory {
+        device_type = "memory";
+        reg = <0x00 0x20000000 0x00 0x10000000>;
+    };
+
+    chosen {
+        linux,stdout-path = "/soc/bus@ff800000/serial@3000";
+        stdout-path = "/soc/bus@ff800000/serial@3000";
+        bootargs = "root=UUID=e139ce78-9841-40fe-8823-96a304a09859 ignore_loglevel debug rootwait earlyprintk=serial rw console=ttyAML0,115200n8 nosmp no_console_suspend fsck.repair=yes net.ifnames=0 elevator=noop hdmimode=1080p60hz cvbsmode=576cvbs max_freq_a55=1908 maxcpus=1 voutmode=hdmi  disablehpd=false cvbscable=0 overscan=100  monitor_onoff=false logo=osd0,loaded hdmitx=cec3f sdrmode=auto enable_wol=0";
+        linux,initrd-end = <0x00000000 0x2e279faa>;
+        linux,initrd-start = <0x00000000 0x2d700000>;
+    };
+};
