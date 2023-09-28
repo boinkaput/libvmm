@@ -44,9 +44,6 @@
 #elif defined(BOARD_imx8mm_evk_hyp)
 #define GUEST_DTB_VADDR 0x4f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
-#elif defined(BOARD_zcu102)
-#define GUEST_DTB_VADDR 0x1f000000
-#define GUEST_INIT_RAM_DISK_VADDR 0x1d700000
 #else
 #error Need to define VM image address and DTB address
 #endif
@@ -68,6 +65,26 @@
 #else
 #error Need to define serial interrupt
 #endif
+
+#define MAX_IRQ_CH 63
+int passthrough_irq_map[MAX_IRQ_CH];
+
+static void passthrough_device_ack(size_t vcpu_id, int irq, void *cookie) {
+    microkit_channel irq_ch = (microkit_channel)(int64_t)cookie;
+    microkit_irq_ack(irq_ch);
+}
+
+static void register_passthrough_irq(int irq, microkit_channel irq_ch) {
+    LOG_VMM("Register passthrough IRQ %d (channel: 0x%lx)\n", irq, irq_ch);
+    assert(irq_ch < MAX_IRQ_CH);
+    passthrough_irq_map[irq_ch] = irq;
+
+    int err = virq_register(GUEST_VCPU_ID, irq, &passthrough_device_ack, (void *)(int64_t)irq_ch);
+    if (!err) {
+        LOG_VMM_ERR("Failed to register IRQ %d\n", irq);
+        return;
+    }
+}
 
 /* Data for the guest's kernel image. */
 extern char _guest_kernel_image[];
@@ -121,6 +138,27 @@ void init(void) {
     success = virq_register(GUEST_VCPU_ID, SERIAL_IRQ, &serial_ack, NULL);
     /* Just in case there is already an interrupt available to handle, we ack it here. */
     microkit_irq_ack(SERIAL_IRQ_CH);
+
+    /* @ivanv: double check and minimise */
+    register_passthrough_irq(225, 1);
+    register_passthrough_irq(222, 2);
+    register_passthrough_irq(223, 3);
+    register_passthrough_irq(232, 4);
+    register_passthrough_irq(40, 5);
+    register_passthrough_irq(35, 15);
+    register_passthrough_irq(96, 6);
+    register_passthrough_irq(192, 7);
+    register_passthrough_irq(193, 8);
+    register_passthrough_irq(194, 9);
+    register_passthrough_irq(53, 10);
+    register_passthrough_irq(228, 11);
+    register_passthrough_irq(63, 12);
+    register_passthrough_irq(62, 13);
+    register_passthrough_irq(48, 16);
+    register_passthrough_irq(89, 14);
+    // // @jade: this should not be necessary. Investigation required.
+    register_passthrough_irq(5, 17);
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
