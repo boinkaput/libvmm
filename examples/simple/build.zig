@@ -118,7 +118,7 @@ pub fn build(b: *std.Build) void {
         "-Werror",
         "-Wno-unused-function",
         "-mstrict-align",
-        "-DBOARD_qemu_arm_virt",
+        fmtPrint("-DBOARD_{s}", .{ microkit_board }), // @ivanv: shouldn't be needed as the library should not depend on the board
     });
 
     libvmm.addIncludePath(.{ .path = libvmm_src });
@@ -159,7 +159,7 @@ pub fn build(b: *std.Build) void {
         "-Werror",
         "-Wno-unused-function",
         "-mstrict-align",
-        "-DBOARD_qemu_arm_virt", // @ivanv: shouldn't be needed as the library should not depend on the board
+        fmtPrint("-DBOARD_{s}", .{ microkit_board }),
     });
 
     const guest_images = b.addObject(.{
