@@ -7,13 +7,18 @@
 #include <stdint.h>
 #include <microkit.h>
 #include "util/util.h"
-#include "arch/aarch64/vgic/vgic.h"
-#include "arch/aarch64/linux.h"
-#include "arch/aarch64/fault.h"
 #include "guest.h"
 #include "virq.h"
 #include "tcb.h"
 #include "vcpu.h"
+#if defined(CONFIG_ARCH_AARCH64)
+#include "arch/aarch64/linux.h"
+#include "arch/aarch64/fault.h"
+#endif
+#if defined(CONFIG_ARCH_RISCV)
+#include "arch/riscv/linux.h"
+#include "arch/riscv/fault.h"
+#endif
 
 // @ivanv: ideally we would have none of these hardcoded values
 // initrd, ram size come from the DTB
@@ -32,6 +37,9 @@
 #if defined(BOARD_qemu_arm_virt)
 #define GUEST_DTB_VADDR 0x4f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
+#elif defined(BOARD_qemu_riscv_virt)
+#define GUEST_DTB_VADDR 0x8f000000
+#define GUEST_INIT_RAM_DISK_VADDR 0x8d700000
 #elif defined(BOARD_rpi4b_hyp)
 #define GUEST_DTB_VADDR 0x2e000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
@@ -54,6 +62,8 @@
 
 #if defined(BOARD_qemu_arm_virt)
 #define SERIAL_IRQ 33
+#elif defined(BOARD_qemu_riscv_virt)
+#define SERIAL_IRQ 10
 #elif defined(BOARD_odroidc2_hyp) || defined(BOARD_odroidc4)
 #define SERIAL_IRQ 225
 #elif defined(BOARD_rpi4b_hyp)
