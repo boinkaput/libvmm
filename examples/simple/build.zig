@@ -9,6 +9,7 @@ fn fmtPrint(comptime fmt: []const u8, args: anytype) []const u8 {
 
 const MicrokitBoard = enum {
     qemu_arm_virt,
+    qemu_riscv_virt,
     odroidc4
 };
 
@@ -23,6 +24,16 @@ const targets = [_]Target {
         .zig_target = std.zig.CrossTarget{
             .cpu_arch = .aarch64,
             .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_a53 },
+            .os_tag = .freestanding,
+            .abi = .none,
+        },
+    },
+   .{
+        .board = MicrokitBoard.qemu_riscv_virt,
+        .zig_target = std.zig.CrossTarget{
+            .cpu_arch = .riscv64,
+            // @ivanv: the generic rv64 does not include "imac"
+            .cpu_model = .{ .explicit = &std.Target.riscv.cpu.generic_rv64 },
             .os_tag = .freestanding,
             .abi = .none,
         },
@@ -95,36 +106,67 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const libvmm_path = "../..";
-    const libvmm_tools = libvmm_path ++ "/tools/";
-    const libvmm_src = libvmm_path ++ "/src/";
-    // Right now we only support AArch64 so this is a safe assumption.
-    const libvmm_src_arch = libvmm_src ++ "arch/aarch64/";
-    libvmm.addCSourceFiles(&.{
+    const libvmm_tools = "../../tools/";
+    const libvmm_src = "../../src/";
+    const arch_str = switch (target.cpu_arch.?) {
+        .aarch64 => "aarch64",
+        // libvmm uses the same directory for both 32-bit and 64-bit RISC-V
+        .riscv64, .riscv32 => "riscv",
+        else => {
+            std.log.err("Unknown CPU target architecture: {s}\n", .{ @tagName(target.cpu_arch.?) });
+            std.os.exit(1);
+        }
+    };
+    const libvmm_src_arch = fmtPrint("{s}/arch/{s}", .{ libvmm_src, arch_str });
+
+    const libvmm_aarch64_files: []const []const u8 = &.{
         libvmm_src ++ "guest.c",
         libvmm_src ++ "util/util.c",
         libvmm_src ++ "util/printf.c",
-        libvmm_src_arch ++ "vgic/vgic.c",
-        libvmm_src_arch ++ "vgic/vgic_v2.c",
-        libvmm_src_arch ++ "fault.c",
-        libvmm_src_arch ++ "psci.c",
-        libvmm_src_arch ++ "smc.c",
-        libvmm_src_arch ++ "virq.c",
-        libvmm_src_arch ++ "linux.c",
-        libvmm_src_arch ++ "tcb.c",
-        libvmm_src_arch ++ "vcpu.c",
-    }, &.{
+        libvmm_src ++ "arch/aarch64/vgic/vgic.c",
+        libvmm_src ++ "arch/aarch64/vgic/vgic_v2.c",
+        libvmm_src ++ "arch/aarch64/fault.c",
+        libvmm_src ++ "arch/aarch64/psci.c",
+        libvmm_src ++ "arch/aarch64/smc.c",
+        libvmm_src ++ "arch/aarch64/virq.c",
+        libvmm_src ++ "arch/aarch64/linux.c",
+        libvmm_src ++ "arch/aarch64/tcb.c",
+        libvmm_src ++ "arch/aarch64/vcpu.c",
+    };
+    const libvmm_riscv_files: []const []const u8 = &.{
+        libvmm_src ++ "guest.c",
+        libvmm_src ++ "util/util.c",
+        libvmm_src ++ "util/printf.c",
+        libvmm_src ++ "arch/riscv/fault.c",
+        libvmm_src ++ "arch/riscv/plic.c",
+        libvmm_src ++ "arch/riscv/virq.c",
+        libvmm_src ++ "arch/riscv/linux.c",
+        libvmm_src ++ "arch/riscv/tcb.c",
+        libvmm_src ++ "arch/riscv/vcpu.c",
+    };
+
+    const cpu_arch = target.cpu_arch.?;
+    const libvmm_source_files = blk: {
+        if (cpu_arch == .aarch64) {
+            break :blk libvmm_aarch64_files;
+        } else if (cpu_arch == .riscv64 or cpu_arch == .riscv32) {
+            break :blk libvmm_riscv_files;
+        } else {
+            unreachable;
+        }
+    };
+
+    libvmm.addCSourceFiles(libvmm_source_files, &.{
         "-Wall",
         "-Werror",
         "-Wno-unused-function",
-        "-mstrict-align",
+        // "-mstrict-align", @ivanv: only for AArch64?
         fmtPrint("-DBOARD_{s}", .{ microkit_board }), // @ivanv: shouldn't be needed as the library should not depend on the board
     });
 
     libvmm.addIncludePath(.{ .path = libvmm_src });
     libvmm.addIncludePath(.{ .path = libvmm_src ++ "util/" });
     libvmm.addIncludePath(.{ .path = libvmm_src_arch });
-    libvmm.addIncludePath(.{ .path = libvmm_src_arch ++ "vgic/" });
     libvmm.addIncludePath(.{ .path = sdk_board_include_dir });
 
     b.installArtifact(libvmm);
@@ -158,7 +200,7 @@ pub fn build(b: *std.Build) void {
         "-Wall",
         "-Werror",
         "-Wno-unused-function",
-        "-mstrict-align",
+        // "-mstrict-align", @ivanv: only for AArch64?
         fmtPrint("-DBOARD_{s}", .{ microkit_board }),
     });
 
@@ -212,8 +254,8 @@ pub fn build(b: *std.Build) void {
 
     // This is setting up a `qemu` command for running the system via QEMU,
     // which we only want to do when we have a board that we can actually simulate.
-    const loader_arg = fmtPrint("loader,file={s},addr=0x70000000,cpu-num=0", .{ final_image_dest });
     if (std.mem.eql(u8, microkit_board, "qemu_arm_virt")) {
+        const loader_arg = fmtPrint("loader,file={s},addr=0x70000000,cpu-num=0", .{ final_image_dest });
         const qemu_cmd = b.addSystemCommand(&[_][]const u8{
             "qemu-system-aarch64",
             "-machine",
@@ -226,6 +268,23 @@ pub fn build(b: *std.Build) void {
             loader_arg,
             "-m",
             "2G",
+            "-nographic",
+        });
+        qemu_cmd.step.dependOn(b.default_step);
+        const simulate_step = b.step("qemu", "Simulate the image via QEMU");
+        simulate_step.dependOn(&qemu_cmd.step);
+    } else if (std.mem.eql(u8, microkit_board, "qemu_riscv_virt")) {
+        // @ivanv: this assumes rv64
+        const qemu_cmd = b.addSystemCommand(&[_][]const u8{
+            "qemu-system-riscv64",
+            "-machine",
+            "virt",
+            "-serial",
+            "mon:stdio",
+            "-kernel",
+            final_image_dest,
+            "-m",
+            "3G",
             "-nographic",
         });
         qemu_cmd.step.dependOn(b.default_step);
