@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -22,25 +24,13 @@ struct linux_image_header {
     uint32_t res4;        // Reserved for PE COFF offset
 };
 
-size_t linux_image_header_major_version(struct linux_image_header *h) {
-    // The upper 15 bits represent the minor version.
-    return (h->version >> 16);
-}
+uintptr_t linux_setup_images(uintptr_t ram_start,
+                             uintptr_t kernel,
+                             size_t kernel_size,
+                             uintptr_t dtb_src,
+                             uintptr_t dtb_dest,
+                             size_t dtb_size,
+                             uintptr_t initrd_src,
+                             uintptr_t initrd_dest,
+                             size_t initrd_size);
 
-size_t linux_image_header_minor_version(struct linux_image_header *h) {
-    // The lower 16 bits represent the minor version.
-    return (h->version & ((1 << 16) - 1));
-}
-
-bool check_magic(struct linux_image_header *h) {
-    // Unfortunately even the Linux kernel developers could not make reading a
-    // magic number a simple operation. The "magic" field is deprecated as of
-    // version 0.2 of the image header, all other versions (at the time of
-    // writing) use the "magic2" field.
-    if (linux_image_header_major_version(h) == 0 &&
-            linux_image_header_minor_version(h) == 2) {
-        return h->magic == LINUX_IMAGE_MAGIC;
-    } else {
-        return h->magic2 == LINUX_IMAGE_MAGIC_2;
-    }
-}
