@@ -98,7 +98,12 @@ void init(void) {
         return;
     }
 
+
+#if defined(BOARD_qemu_arm_virt)
     register_passthrough_irq(33, 1);
+#elif defined(BOARD_odroidc4)
+    register_passthrough_irq(225, 1);
+#endif
 
     // Register virtio_mmio faults
     fault_register_vm_exception_handler(VIRTIO_ADDRESS_START, VIRTIO_ADDRESS_END - VIRTIO_ADDRESS_START, &virtio_mmio_handle_fault);

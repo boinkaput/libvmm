@@ -1,4 +1,4 @@
-build/
+build*/
 zig-out/
 zig-cache/
 *.pdf
