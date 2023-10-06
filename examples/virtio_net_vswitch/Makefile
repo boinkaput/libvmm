@@ -63,7 +63,10 @@ SYSTEM_DESCRIPTION := board/$(BOARD)/virtio_demo.system
 IMAGE_DIR := board/$(BOARD)
 LINUX := $(IMAGE_DIR)/linux
 DTS := $(IMAGE_DIR)/linux.dts
-DTB := $(BUILD_DIR)/linux.dtb
+VMM1_DTS_OVERLAY := $(IMAGE_DIR)/vmm1_overlay.dts
+VMM2_DTS_OVERLAY := $(IMAGE_DIR)/vmm2_overlay.dts
+VMM1_DTB := $(BUILD_DIR)/vmm1_linux.dtb
+VMM2_DTB := $(BUILD_DIR)/vmm2_linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
 ELFS := vmm1.elf vmm2.elf
@@ -72,10 +75,10 @@ IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
 
 # @ivanv: should only compile printf.o in debug
-VMM1_OBJS := vmm1.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_guest_images.o tcb.o vcpu.o
+VMM1_OBJS := vmm1.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o vmm1_package_guest_images.o tcb.o vcpu.o
 VMM1_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o
 
-VMM2_OBJS := vmm2.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_guest_images.o tcb.o vcpu.o
+VMM2_OBJS := vmm2.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o vmm2_package_guest_images.o tcb.o vcpu.o
 VMM2_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o
 
 # Toolchain flags
@@ -114,15 +117,29 @@ qemu: all
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-$(DTB): $(DTS)
+$(VMM1_DTB): $(DTS) $(VMM1_DTS_OVERLAY)
 	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
 	# @ivanv: Shouldn't supress warnings
-	$(DTC) -q -I dts -O dtb $< > $@
+	cat $^ > $(BUILD_DIR)/tem.dts
+	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/tem.dts > $@
 
-$(BUILD_DIR)/package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(DTB)
+$(VMM2_DTB): $(DTS) $(VMM2_DTS_OVERLAY)
+	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
+	# @ivanv: Shouldn't supress warnings
+	cat $^ > $(BUILD_DIR)/tem.dts
+	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/tem.dts > $@
+
+$(BUILD_DIR)/vmm1_package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(VMM1_DTB)
 	$(CC) -c -g3 -x assembler-with-cpp \
 					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
-					-DGUEST_DTB_IMAGE_PATH=\"$(DTB)\" \
+					-DGUEST_DTB_IMAGE_PATH=\"$(VMM1_DTB)\" \
+					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
+					$< -o $@
+
+$(BUILD_DIR)/vmm2_package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(VMM2_DTB)
+	$(CC) -c -g3 -x assembler-with-cpp \
+					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
+					-DGUEST_DTB_IMAGE_PATH=\"$(VMM2_DTB)\" \
 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
 					$< -o $@
 
