@@ -5,11 +5,32 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 #include <sel4/sel4.h>
-#include "odroidc2.h"
-#include "shared_ringbuffer.h"
-#include "util.h"
+#include "./include/odroidc2.h"
+#include "../libsharedringbuffer/include/shared_ringbuffer.h"
+#include "../util/util.h"
+#include "../util/printf.h"
+
+static char
+hexchar(unsigned int v)
+{
+    return v < 10 ? '0' + v : ('a' - 10) + v;
+}
+
+static void
+puthex64(uint64_t val)
+{
+    char buffer[16 + 3];
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    buffer[16 + 3 - 1] = 0;
+    for (unsigned i = 16 + 1; i > 1; i--) {
+        buffer[i] = hexchar(val & 0xf);
+        val >>= 4;
+    }
+    microkit_dbg_puts(buffer);
+}
 
 #define IRQ_2  0
 #define IRQ_CH 1
@@ -28,7 +49,7 @@ uintptr_t rx_avail;
 uintptr_t rx_used;
 uintptr_t tx_avail;
 uintptr_t tx_used;
-uintptr_t uart_base;
+// uintptr_t uart_base;
 
 /* Make the minimum frame buffer 2k. This is a bit of a waste of memory, but ensures alignment */
 #define PACKET_BUFFER_SIZE  2048
@@ -95,10 +116,10 @@ static void
 dump_mac(uint8_t *mac)
 {
     for (unsigned i = 0; i < 6; i++) {
-        sel4cp_dbg_putc(hexchar((mac[i] >> 4) & 0xf));
-        sel4cp_dbg_putc(hexchar(mac[i] & 0xf));
+        microkit_dbg_putc(hexchar((mac[i] >> 4) & 0xf));
+        microkit_dbg_putc(hexchar(mac[i] & 0xf));
         if (i < 5) {
-            sel4cp_dbg_putc(':');
+            microkit_dbg_putc(':');
         }
     }
 }
@@ -110,7 +131,7 @@ getPhysAddr(uintptr_t virtual)
     uintptr_t phys;
 
     if (offset < 0) {
-        print("getPhysAddr: offset < 0");
+        printf("getPhysAddr: offset < 0");
         return 0;
     }
 
@@ -143,7 +164,7 @@ alloc_rx_buf(size_t buf_size, void **cookie)
 
     /* Try to grab a buffer from the available ring */
     if (driver_dequeue(rx_ring.avail_ring, &addr, &len, cookie)) {
-        print("RX Available ring is empty\n");
+        printf("RX Available ring is empty\n");
         return 0;
     }
 
@@ -226,7 +247,7 @@ handle_rx()
     /* Notify client (only if we have actually processed a packet and 
     the client hasn't already been notified!) */
     if (num > 1 && was_empty) {
-        sel4cp_notify(RX_CH);
+        microkit_notify(RX_CH);
     } 
 }
 
@@ -245,7 +266,7 @@ complete_tx()
             cnt = tx_lengths[head];
             if ((0 == cnt) || (cnt > TX_COUNT)) {
                 /* We are not supposed to read 0 here. */
-                print("complete_tx with cnt=0 or max");
+                printf("complete_tx with cnt=0 or max");
                 return;
             }
             cnt_org = cnt;
@@ -257,7 +278,7 @@ complete_tx()
         /* If this buffer was not sent, we can't release any buffer. */
         if (d->status & DESC_TXSTS_OWNBYDMA) {
             /* not complete yet */
-            sel4cp_dbg_puts("Buffer was not sent\n");
+            microkit_dbg_puts("Buffer was not sent\n");
             return;
         }
 
@@ -282,7 +303,7 @@ complete_tx()
      * of tx descriptors holding data can't exceed the space in the ring.
      */
     if (0 != cnt) {
-        print("head reached tail, but cnt!= 0");
+        printf("head reached tail, but cnt!= 0");
     }
 }
 
@@ -297,7 +318,7 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
         complete_tx();
         unsigned int rem = ring->remain;
         if (rem < num) {
-            print("TX queue lacks space");
+            printf("TX queue lacks space");
             return;
         }
     }
@@ -319,7 +340,7 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
             tail_new = 0;
         }
         if (ring->descr[idx].status & DESC_TXSTS_OWNBYDMA) {
-            print("CPU not owner of frame!");
+            printf("CPU not owner of frame!");
         }
         update_ring_slot(ring, idx, DESC_TXSTS_OWNBYDMA, cntl, *phys++);
     }
@@ -356,19 +377,19 @@ handle_eth(volatile struct eth_dma_regs *eth_dma)
             fill_rx_bufs();
         }
         if (e & DMA_INTR_ABNORMAL) {
-            print("Error: System bus/uDMA\n");
+            printf("Error: System bus/uDMA\n");
             puthex64(e);
             if (e & DMA_INTR_ENA_FBE) {
-                print("    Ethernet device fatal bus error\n");
+                printf("    Ethernet device fatal bus error\n");
             }
             if (e & DMA_INTR_ENA_UNE) {
-                print("    Ethernet device TX underflow\n");
+                printf("    Ethernet device TX underflow\n");
             }
             if (e & DMA_INTR_ENA_RBU) {
-                print("    Ethernet device RX Buffer unavailable\n");
+                printf("    Ethernet device RX Buffer unavailable\n");
             }
             if (e & DMA_INTR_ENA_RPS) {
-                print("    Ethernet device RX Stopped\n");
+                printf("    Ethernet device RX Stopped\n");
                 fill_rx_bufs();
                 break;
             }
@@ -397,9 +418,9 @@ static void
 eth_setup(void)
 {
     get_mac_addr(eth_mac, mac);
-    sel4cp_dbg_puts("MAC: ");
+    microkit_dbg_puts("MAC: ");
     dump_mac(mac);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 
     /* set up descriptor rings */
     rx.cnt = RX_COUNT;
@@ -478,22 +499,22 @@ void init_post()
     eth_mac->conf |= RXENABLE | TXENABLE;
     eth_dma->opmode |= TXSTART | RXSTART;
 
-    print(sel4cp_name);
-    print(": init complete -- waiting for interrupt\n");
-    sel4cp_notify(INIT);
+    printf(microkit_name);
+    printf(": init complete -- waiting for interrupt\n");
+    microkit_notify(INIT);
 
     /* Now take away our scheduling context. Uncomment this for a passive driver. */
     /* have_signal = true;
     msg = seL4_MessageInfo_new(0, 0, 0, 1);
     seL4_SetMR(0, 0);
     signal = (MONITOR_EP); */
-    sel4cp_irq_ack(IRQ_CH);
+    microkit_irq_ack(IRQ_CH);
 }
 
 void init(void)
 {
-    print(sel4cp_name);
-    print(": elf PD init function running\n");
+    printf(microkit_name);
+    printf(": elf PD init function running\n");
 
     eth_setup();
 
@@ -501,26 +522,26 @@ void init(void)
 }
 
 seL4_MessageInfo_t
-protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
+protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (ch) {
         case INIT:
             // return the MAC address. 
-            sel4cp_mr_set(0, eth_mac->macaddr0lo);
-            sel4cp_mr_set(1, eth_mac->macaddr0hi);
-            return sel4cp_msginfo_new(0, 2);
+            microkit_mr_set(0, eth_mac->macaddr0lo);
+            microkit_mr_set(1, eth_mac->macaddr0hi);
+            return microkit_msginfo_new(0, 2);
         case TX_CH:
             handle_tx();
             break;
         default:
-            sel4cp_dbg_puts("Received ppc on unexpected channel ");
+            microkit_dbg_puts("Received ppc on unexpected channel ");
             puthex64(ch);
             break;
     }
-    return sel4cp_msginfo_new(0, 0);
+    return microkit_msginfo_new(0, 0);
 }
 
-void notified(sel4cp_channel ch)
+void notified(microkit_channel ch)
 {
     switch(ch) {
         case IRQ_CH:
@@ -541,7 +562,7 @@ void notified(sel4cp_channel ch)
             handle_tx();
             break;
         default:
-            sel4cp_dbg_puts("eth driver: received notification on unexpected channel\n");
+            microkit_dbg_puts("eth driver: received notification on unexpected channel\n");
             break;
     }
 }
