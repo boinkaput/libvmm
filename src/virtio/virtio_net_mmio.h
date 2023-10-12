@@ -8,7 +8,7 @@
 
 #include "virtio/virtio_mmio.h"
 
-#define VSWITCH_CONN_CH_1  2
+#define NET_CLIENT_RX_CH   2
 
 // the amount of virtqueues
 // it is set to 2 because the backend currently don't support VIRTIO_NET_F_MQ and VIRTIO_NET_F_CTRL_VQ,
@@ -19,7 +19,7 @@ void virtio_net_mmio_ack(uint64_t vcpu_id, int irq, void *cookie);
 
 virtio_mmio_handler_t *get_virtio_net_mmio_handler(void);
 
-int vswitch_rx(microkit_channel channel);
+int net_client_rx(void);
 
-void virtio_net_mmio_init(uintptr_t net_tx_avail, uintptr_t net_tx_used, uintptr_t net_tx_shared_dma_vaddr,
-                          uintptr_t net_rx_avail, uintptr_t net_rx_used, uintptr_t net_rx_shared_dma_vaddr);
+void virtio_net_mmio_init(uintptr_t net_tx_avail, uintptr_t net_tx_used,
+                          uintptr_t net_rx_avail, uintptr_t net_rx_used, uintptr_t net_shared_dma_vaddr);

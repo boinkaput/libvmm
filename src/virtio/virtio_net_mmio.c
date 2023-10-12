@@ -36,45 +36,25 @@
 #include "virtio/virtio_irq.h"
 #include "include/config/virtio_net.h"
 #include "include/config/virtio_config.h"
+#include "include/helper.h"
 #include "../virq.h"
 #include "../util/util.h"
 #include "../libsharedringbuffer/include/shared_ringbuffer.h"
 
 // @jade: add some giant comments about this file
 
-#define BIT_LOW(n) (1ul<<(n))
-#define BIT_HIGH(n) (1ul<<(n - 32 ))
-
-#define REG_RANGE(r0, r1)   r0 ... (r1 - 1)
-
 #define RX_QUEUE 0
 #define TX_QUEUE 1
 
 // @jade, @ericc: These are sDDF specific, belong in a configuration file elsewhere ideally
-#define SHMEM_NUM_BUFFERS 256
-#define SHMEM_BUF_SIZE 0x1000
+#define SHMEM_NUM_BUFFERS 512
+#define SHMEM_BUF_SIZE 2048
 
 // @jade, @ivanv: need to be able to get it from vgic
 #define VCPU_ID 0
 
 // @jade: random number that I picked, maybe a smaller buffer size would be better?
-#define TMP_BUF_SIZE 0x1000
-
-// @jade: Need to introduce or parameterise this variable into the build system
-#define NUM_NODE 1
-
-#define PR_MAC802_ADDR  "%x:%x:%x:%x:%x:%x"
-
-/* Expects a *pointer* to a struct ether_addr */
-#define PR_MAC802_ADDR_ARGS(a, dir)     (a)->ether_##dir##_addr_octet[0], \
-                                        (a)->ether_##dir##_addr_octet[1], \
-                                        (a)->ether_##dir##_addr_octet[2], \
-                                        (a)->ether_##dir##_addr_octet[3], \
-                                        (a)->ether_##dir##_addr_octet[4], \
-                                        (a)->ether_##dir##_addr_octet[5]
-
-#define PR_MAC802_DEST_ADDR_ARGS(a) PR_MAC802_ADDR_ARGS(a, dest)
-#define PR_MAC802_SRC_ADDR_ARGS(a) PR_MAC802_ADDR_ARGS(a, src)
+#define TMP_BUF_SIZE 2048
 
 // mmio handler of this instance of virtio net layer
 static virtio_mmio_handler_t net_mmio_handler;
@@ -85,43 +65,114 @@ static virtqueue_t vqs[VIRTIO_NET_MMIO_NUM_VIRTQUEUE];
 // temporary buffer to transmit buffer from this layer to the backend layer
 static char temp_buf[TMP_BUF_SIZE];
 
-// sDDF memory regions, initialised by the virtio net mmio init function
-static uintptr_t rx_avail;
-static uintptr_t rx_used;
-static uintptr_t tx_avail;
-static uintptr_t tx_used;
-static uintptr_t rx_shared_dma_vaddr;
-static uintptr_t tx_shared_dma_vaddr;
+// @jade: find a nice place
+#define NET_CLIENT_TX_CH        2
+#define NET_CLIENT_GET_MAC_CH   4
 
-typedef struct node_handler {
-    ring_handle_t rx_ring;
-    ring_handle_t tx_ring;
-    uint8_t macaddr[6];
-    microkit_channel channel;
-} node_handler_t;
+ring_handle_t net_client_rx_ring;
+ring_handle_t net_client_tx_ring;
 
-// handler of the connections
-static node_handler_t map[NUM_NODE];
+// @jade: I don't know why we need these but the driver seems to care
 
-// @jade: should be able to get this from a build system in the future
-static uint8_t vswitch_mac_address[6];
+typedef enum {
+    ORIGIN_RX_QUEUE,
+    ORIGIN_TX_QUEUE,
+} ethernet_buffer_origin_t;
 
-/* This is a name for the 96 bit ethernet addresses available on many
-   systems.  */
-struct ether_addr {
-    uint8_t ether_dest_addr_octet[6];
-    uint8_t ether_src_addr_octet[6];
-} __attribute__ ((__packed__));
+typedef struct ethernet_buffer {
+    /* The acutal underlying memory of the buffer */
+    uintptr_t buffer;
+    /* The physical size of the buffer */
+    size_t size;
+    /* Queue from which the buffer was allocated */
+    char origin;
+    /* Index into buffer_metadata array */
+    unsigned int index;
+    /* in use */
+    bool in_use;
+} ethernet_buffer_t;
 
-// static uint8_t null_macaddr[6] = {0, 0, 0, 0, 0, 0};
-static uint8_t bcast_macaddr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static uint8_t ipv6_multicast_macaddr[6] = {0x33, 0x33, 0x0, 0x0, 0x0, 0x0};
+ethernet_buffer_t buffer_metadata[SHMEM_NUM_BUFFERS * 2];
 
-static void vswitch_get_mac(uint8_t *retval);
+static int virtio_net_mmio_handle_rx(void *buf, uint32_t size);
 
-static int vswitch_tx(void *buf, uint32_t size);
+static void net_client_get_mac(uint8_t *retval)
+{
+    microkit_ppcall(NET_CLIENT_GET_MAC_CH, microkit_msginfo_new(0, 0));
+    uint32_t palr = microkit_mr_get(0);
+    uint32_t paur = microkit_mr_get(1);
 
-static void vswitch_init(void);
+    retval[5] = paur >> 8 & 0xff;
+    retval[4] = paur & 0xff;
+    retval[3] = palr >> 24;
+    retval[2] = palr >> 16 & 0xff;
+    retval[1] = palr >> 8 & 0xff;
+    retval[0] = palr & 0xff;
+    printf("\"%s\"|VMM NET CLIENT|INFO: net_client_get_mac\n", microkit_name);
+}
+
+// sent packet from this vmm to another
+static bool net_client_tx(void *buf, uint32_t size)
+{
+    uintptr_t addr;
+    unsigned int len;
+    void *cookie;
+
+    // get a buffer from the avail ring
+    int error = dequeue_avail(&net_client_tx_ring, &addr, &len, &cookie);
+    if (error) {
+        printf("\"%s\"|VMM NET CLIENT|INFO: avail ring is empty\n", microkit_name);
+        return false;
+    }
+    assert(size <= len);
+
+    // @jade: eliminate this copy
+    memcpy((void *)addr, buf, size);
+
+    // struct ether_addr *macaddr = (struct ether_addr *)addr;
+    // printf("\"%s\"|VIRTIO MMIO|INFO: outgoing, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
+    //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
+
+    /* insert into the used ring */
+    error = enqueue_used(&net_client_tx_ring, addr, size, NULL);
+    if (error) {
+        printf("\"%s\"|VMM NET CLIENT|INFO: TX used ring full\n", microkit_name);
+        enqueue_avail(&net_client_tx_ring, addr, len, NULL);
+        return false;
+    }
+
+    /* notify the other end */
+    microkit_notify(NET_CLIENT_TX_CH);
+
+    return true;
+}
+
+int net_client_rx(void)
+{
+    uintptr_t addr;
+    unsigned int len;
+    void *cookie;
+
+    while(!ring_empty(net_client_rx_ring.used_ring)) {
+        int error = dequeue_used(&net_client_rx_ring, &addr, &len, &cookie);
+        // RX used ring is empty, this is not suppose to happend!
+        assert(!error);
+
+        struct ether_addr *macaddr = (struct ether_addr *)addr;
+        // printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
+        //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
+
+        if (!mac802_addr_eq_bcast(macaddr->ether_dest_addr_octet)) {
+            // printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
+            // microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
+            virtio_net_mmio_handle_rx((void *)addr, len);
+        }
+
+        enqueue_avail(&net_client_rx_ring, addr, SHMEM_BUF_SIZE, NULL);
+    }
+
+    return 0;
+}
 
 void virtio_net_mmio_ack(uint64_t vcpu_id, int irq, void *cookie) {
     // printf("\"%s\"|VIRTIO NET|INFO: virtio_net_ack %d\n", microkit_name, irq);
@@ -140,7 +191,7 @@ virtio_mmio_handler_t *get_virtio_net_mmio_handler(void)
 void virtio_net_mmio_reset(void)
 {
     vqs[RX_QUEUE].ready = 0;
-    vqs[RX_QUEUE].last_idx = 1;
+    vqs[RX_QUEUE].last_idx = 0;
 
     vqs[TX_QUEUE].ready = 0;
     vqs[TX_QUEUE].last_idx = 0;
@@ -205,7 +256,7 @@ int virtio_net_mmio_get_device_config(uint32_t offset, uint32_t *ret_val)
         case REG_RANGE(0x100, 0x104):
         {
             uint8_t mac[6];
-            vswitch_get_mac(mac);
+            net_client_get_mac(mac);
             *ret_val = mac[0];
             *ret_val |= mac[1] << 8;
             *ret_val |= mac[2] << 16;
@@ -216,7 +267,7 @@ int virtio_net_mmio_get_device_config(uint32_t offset, uint32_t *ret_val)
         case REG_RANGE(0x104, 0x108):
         {
             uint8_t mac[6];
-            vswitch_get_mac(mac);
+            net_client_get_mac(mac);
             *ret_val = mac[4];
             *ret_val |= mac[5] << 8;
             break;
@@ -296,8 +347,8 @@ static int virtio_net_mmio_handle_queue_notify_tx()
         } while (vring->desc[curr_desc_head].flags & VRING_DESC_F_NEXT);
 
         /* ship the buffer to the next layer */
-        int err = vswitch_tx(temp_buf, written);
-        if (err) {
+        int success = net_client_tx(temp_buf, written);
+        if (!success) {
             printf("VIRTIO NET|WARNING: VirtIO Net failed to deliver packet for the guest\n.");
         }
 
@@ -309,8 +360,8 @@ static int virtio_net_mmio_handle_queue_notify_tx()
     return 1;
 }
 
-// handle rx from vswitch
-static int virtio_net_mmio_handle_vswitch_rx(void *buf, uint32_t size)
+// handle rx from client
+static int virtio_net_mmio_handle_rx(void *buf, uint32_t size)
 {
     if (!vqs[RX_QUEUE].ready) {
         // vq is not initialised, drop the packet
@@ -323,12 +374,13 @@ static int virtio_net_mmio_handle_vswitch_rx(void *buf, uint32_t size)
     uint16_t idx = vqs[RX_QUEUE].last_idx;
 
     if (idx == guest_idx) {
-        printf("\"%s\"|VIRTIO NET|WARNING: queue is full, drop the packet\n", microkit_name);
+        // vq is full or not fully initialised (in this case idx and guest_idx are both 0s), drop the packet
         return 1;
     }
 
-    struct virtio_net_hdr_mrg_rxbuf virtio_hdr;
-    memzero(&virtio_hdr, sizeof(virtio_hdr));
+    struct virtio_net_hdr_mrg_rxbuf virtio_hdr = {0};
+    virtio_hdr.num_buffers = 1;
+    // memzero(&virtio_hdr, sizeof(virtio_hdr));
 
     /* total length of the copied packet */
     size_t copied = 0;
@@ -369,7 +421,7 @@ static int virtio_net_mmio_handle_vswitch_rx(void *buf, uint32_t size)
 
         // do we need another buffer from the virtqueue?
         if (desc_copied == vring->desc[curr_desc_head].len) {
-            if (!vring->desc[curr_desc_head].flags & VRING_DESC_F_NEXT) {
+            if (!(vring->desc[curr_desc_head].flags & VRING_DESC_F_NEXT)) {
                 /* descriptor chain is too short to hold the whole packet.
                 * just truncate */
                 break;
@@ -422,219 +474,50 @@ static virtio_mmio_funs_t mmio_funs = {
     .queue_notify = virtio_net_mmio_handle_queue_notify_tx,
 };
 
-void virtio_net_mmio_init(uintptr_t net_tx_avail, uintptr_t net_tx_used, uintptr_t net_tx_shared_dma_vaddr,
-                          uintptr_t net_rx_avail, uintptr_t net_rx_used, uintptr_t net_rx_shared_dma_vaddr)
+void virtio_net_mmio_init(uintptr_t net_client_tx_avail, uintptr_t net_client_tx_used, 
+                          uintptr_t net_client_rx_avail, uintptr_t net_client_rx_used, uintptr_t net_client_shared_dma_vaddr)
 {    
-    tx_avail = net_tx_avail;
-    tx_used = net_tx_used;
-    tx_shared_dma_vaddr = net_tx_shared_dma_vaddr;
-    rx_avail = net_rx_avail;
-    rx_used = net_rx_used;
-    rx_shared_dma_vaddr = net_rx_shared_dma_vaddr;
+    /* initialize the client interface */
+    ring_init(&net_client_rx_ring, (ring_buffer_t *)net_client_rx_avail, (ring_buffer_t *)net_client_rx_used, NULL, 1);
+    ring_init(&net_client_tx_ring, (ring_buffer_t *)net_client_tx_avail, (ring_buffer_t *)net_client_tx_used, NULL, 1);
 
-    vswitch_init();
+    /* fill RX avail queue with empty buffers */
+    for (int i = 0; i < SHMEM_NUM_BUFFERS - 1; i++) {
+        ethernet_buffer_t *buffer = &buffer_metadata[i];
+        *buffer = (ethernet_buffer_t) {
+            .buffer = net_client_shared_dma_vaddr + (SHMEM_BUF_SIZE * i),
+            .size = SHMEM_BUF_SIZE,
+            .origin = ORIGIN_RX_QUEUE,
+            .index = i,
+            .in_use = false,
+        };
+        int ret = enqueue_avail(&net_client_rx_ring, buffer->buffer, SHMEM_BUF_SIZE, buffer);
+        assert(ret == 0);
+    }
 
+    /* fill TX avail queue with empty buffers */
+    for (int i = 0; i < SHMEM_NUM_BUFFERS - 1; i++) {
+        ethernet_buffer_t *buffer = &buffer_metadata[i + SHMEM_NUM_BUFFERS];
+        *buffer = (ethernet_buffer_t) {
+            .buffer = net_client_shared_dma_vaddr + (SHMEM_BUF_SIZE * (i + SHMEM_NUM_BUFFERS)),
+            .size = SHMEM_BUF_SIZE,
+            .origin = ORIGIN_TX_QUEUE,
+            .index = i + SHMEM_NUM_BUFFERS,
+            .in_use = false,
+        };
+        int ret = enqueue_avail(&net_client_tx_ring, buffer->buffer, SHMEM_BUF_SIZE, buffer);
+        assert(ret == 0);
+    }
+
+    /* initialize the virtio mmio interface */
     net_mmio_handler.data.DeviceID = DEVICE_ID_VIRTIO_NET;
     net_mmio_handler.data.VendorID = VIRTIO_MMIO_DEV_VENDOR_ID;
     net_mmio_handler.funs = &mmio_funs;
 
-    /* must keep this or the driver complains */
-    vqs[RX_QUEUE].last_idx = 1;
-
     net_mmio_handler.vqs = vqs;
-}
 
-static inline bool mac802_addr_eq_num(uint8_t *addr0, uint8_t *addr1, unsigned int num)
-{
-    assert(num <= 6);
-    for (int i = 0; i < num; i++) {
-        if (addr0[i] != addr1[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static inline bool mac802_addr_eq(uint8_t *addr0, uint8_t *addr1)
-{
-    return mac802_addr_eq_num(addr0, addr1, 6);
-}
-
-static inline bool mac802_addr_eq_bcast(uint8_t *addr)
-{
-    return mac802_addr_eq(addr, bcast_macaddr);
-}
-
-static inline bool mac802_addr_eq_ipv6_mcast(uint8_t *addr)
-{
-    return mac802_addr_eq_num(addr, ipv6_multicast_macaddr, 2);
-}
-
-static void vswitch_get_mac(uint8_t *retval)
-{
-    for (int i = 0; i < 6; i++) {
-        retval[i] = vswitch_mac_address[i];
-    }
-}
-
-static node_handler_t *get_node_by_mac(uint8_t *addr)
-{
-    for (int i = 0; i < NUM_NODE; i++) {
-        if (mac802_addr_eq(addr, map[i].macaddr)) {
-            return &map[i];
-        }
-    }
-    return NULL;
-}
-
-static node_handler_t *get_node_by_channel(microkit_channel ch)
-{
-    for (int i = 0; i < NUM_NODE; i++) {
-        if (map[i].channel == ch) {
-            return &map[i];
-        }
-    }
-    return NULL;
-}
-
-static int send_packet_to_node(void *buf, uint32_t size, node_handler_t *node)
-{
-    assert(node);
-
-    uintptr_t addr;
-    unsigned int len;
-    void *cookie;
-
-    // get a buffer from the avail ring
-    int error = dequeue_avail(&node->tx_ring, &addr, &len, &cookie);
-    if (error) {
-        printf("\"%s\"|VSWITCH|INFO: avail ring is empty\n", microkit_name);
-        return 1;
-    }
-    assert(size <= len);
-
-    // copy data to the buffer
-    memcpy((void *)addr, buf, size);
-
-    /* insert into the used ring */
-    error = enqueue_used(&node->tx_ring, addr, size, NULL);
-    if (error) {
-        printf("\"%s\"|VSWITCH|INFO: TX used ring full\n", microkit_name);
-        enqueue_avail(&node->tx_ring, addr, len, NULL);
-        return 1;
-    }
-
-    /* notify the other end of the node */
-    microkit_notify(node->channel);
-
-    return 0;
-}
-
-// sent packet from this vmm to another
-static int vswitch_tx(void *buf, uint32_t size)
-{
-    /* Initialize a convenience pointer to the dest macaddr.
-     * The dest MAC addr is the first member of an ethernet frame. */
-    struct ether_addr *macaddr = (struct ether_addr *)buf;
-
-    // san check
-    if (!mac802_addr_eq(macaddr->ether_src_addr_octet, vswitch_mac_address)) {
-        printf("\"%s\"|VSWITCH|INFO: incorrect src MAC: "PR_MAC802_ADDR"\n", microkit_name, PR_MAC802_SRC_ADDR_ARGS(macaddr));
-        return 1;
-    }
-
-    int error = 0;
-
-    // printf("\"%s\"|VSWITCH|INFO: transmitting, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
-    //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
-
-    // if the mac address is broadcast of ipv6 milticast, sent the packet to everyone
-    if (mac802_addr_eq_bcast(macaddr->ether_dest_addr_octet) || mac802_addr_eq_ipv6_mcast(macaddr->ether_dest_addr_octet)) {
-        for (int i = 0; i < NUM_NODE; i++) {
-            error += send_packet_to_node(buf, size, &map[i]);
-        }
-
-    // otherwise, find the receiver
-    } else {
-        node_handler_t *node = get_node_by_mac(macaddr->ether_dest_addr_octet);
-        if (node) {
-            error = send_packet_to_node(buf, size, node);
-        }
-    }
-    // we drop the packet if we can't find a destination for it
-
-    return error;
-}
-
-int vswitch_rx(microkit_channel channel)
-{
-    uintptr_t addr;
-    unsigned int len;
-    void *cookie;
-
-    // struct ether_addr *macaddr = (struct ether_addr *)addr;
-    // printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
-    //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
-
-    node_handler_t *node = get_node_by_channel(channel);
-    assert(node);
-
-    while(!ring_empty(node->rx_ring.used_ring)) {
-
-        int error = dequeue_used(&node->rx_ring, &addr, &len, &cookie);
-        // RX used ring is empty, this is not suppose to happend!
-        assert(!error);
-
-        virtio_net_mmio_handle_vswitch_rx((void *)addr, len);
-
-        enqueue_avail(&node->rx_ring, addr, SHMEM_BUF_SIZE, NULL);
-    }
-
-    return 0;
-}
-
-// @ericc: Leaving this hack here for now, refactor in the future
-// This is specfic to the vswitch, we need to know which vmm we are
-static uint64_t get_vmm_id(char *microkit_name)
-{
-    // @ivanv: Absolute hack
-    return microkit_name[4] - '0';
-}
-
-static void vswitch_init()
-{
-    // @jade: we don't have a good way to config connection layouts for the vswitch right now,
-    // so I'm just going to hard-code a node to get the vswitch working.
-    ring_init(&map[0].rx_ring, (ring_buffer_t *)rx_avail, (ring_buffer_t *)rx_used, NULL, 1);
-    ring_init(&map[0].tx_ring, (ring_buffer_t *)tx_avail, (ring_buffer_t *)tx_used, NULL, 0);
-
-    map[0].macaddr[0] = 0x02;
-    map[0].macaddr[1] = 0x00;
-    map[0].macaddr[2] = 0x00;
-    map[0].macaddr[3] = 0x00;
-    map[0].macaddr[4] = 0xaa;
-
-    vswitch_mac_address[0] = 0x02;
-    vswitch_mac_address[1] = 0x00;
-    vswitch_mac_address[2] = 0x00;
-    vswitch_mac_address[3] = 0x00;
-    vswitch_mac_address[4] = 0xaa;
-
-    if (get_vmm_id(microkit_name) == 1) {
-        map[0].macaddr[5] = 0x02;
-        vswitch_mac_address[5] = 0x01;
-
-    } else {
-        map[0].macaddr[5] = 0x01;
-        vswitch_mac_address[5] = 0x02;
-    }
-
-    map[0].channel = VSWITCH_CONN_CH_1;
-
-    // fill avail queue with empty buffers
-    for (int i = 0; i < SHMEM_NUM_BUFFERS - 1; i++) {
-        uintptr_t addr = rx_shared_dma_vaddr + (SHMEM_BUF_SIZE * i);
-        int ret = enqueue_avail(&map[0].rx_ring, addr, SHMEM_BUF_SIZE, NULL);
-        assert(ret == 0);
-    }
+    /* tell the driver to start doing work. This is part of the protocol of odroidc2 driver implementation
+     * and doesn't apply to any else.
+     * @jade: this needs to be change when we add a mux */
+    microkit_notify(NET_CLIENT_GET_MAC_CH);
 }

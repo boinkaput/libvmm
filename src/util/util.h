@@ -11,6 +11,10 @@
 #include <microkit.h>
 #include "printf.h"
 
+#define BIT_LOW(n) (1ul<<(n))
+#define BIT_HIGH(n) (1ul<<(n - 32 ))
+#define REG_RANGE(r0, r1)   r0 ... (r1 - 1)
+
 #define MIN(a,b) \
     ({ typeof (a) _a = (a); \
        typeof (b) _b = (b); \
