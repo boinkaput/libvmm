@@ -15,8 +15,6 @@
 // @jade: add some giant comments about this file
 // generic virtio mmio interface
 
-#define REG_RANGE(r0, r1)   r0 ... (r1 - 1)
-
 static virtio_mmio_handler_t *get_mmio_handler_by_address(uint64_t addr)
 {
     switch (addr)
