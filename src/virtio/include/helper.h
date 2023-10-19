@@ -18,6 +18,9 @@
 struct ether_addr {
     uint8_t ether_dest_addr_octet[6];
     uint8_t ether_src_addr_octet[6];
+    uint8_t etype[2]; // Ethertype
+    uint8_t payload[46];
+    uint8_t crc[4];
 } __attribute__ ((__packed__));
 
 uint8_t null_macaddr[6] = {0, 0, 0, 0, 0, 0};

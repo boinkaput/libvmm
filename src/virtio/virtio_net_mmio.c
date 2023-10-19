@@ -94,7 +94,18 @@ typedef struct ethernet_buffer {
 
 ethernet_buffer_t buffer_metadata[SHMEM_NUM_BUFFERS * 2];
 
-static int virtio_net_mmio_handle_rx(void *buf, uint32_t size);
+static bool virtio_net_mmio_handle_rx(void *buf, uint32_t size);
+
+// static void dump_payload(int len, uint8_t *buffer)
+// {
+//     printf("-------------------- payload start --------------------\n");
+//     for (int i = 0; i < len; i++) {
+//         printf("%02x ", buffer[i]);
+//     }
+//     printf("\n");
+//     printf("--------------------- payload end ---------------------\n");
+//     printf("\n\n");
+// }
 
 static void net_client_get_mac(uint8_t *retval)
 {
@@ -129,10 +140,13 @@ static bool net_client_tx(void *buf, uint32_t size)
     // @jade: eliminate this copy
     memcpy((void *)addr, buf, size);
 
-    // struct ether_addr *macaddr = (struct ether_addr *)addr;
-    // printf("\"%s\"|VIRTIO MMIO|INFO: outgoing, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
-    //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
-
+    struct ether_addr *macaddr = (struct ether_addr *)addr;
+    if (macaddr->etype[0] & 0x8) {
+        printf("\"%s\"|VIRTIO MMIO|INFO: outgoing, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR", type: 0x%02x%02x\n",
+                microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr),
+                macaddr->etype[0], macaddr->etype[1]);
+        // dump_payload(size - 14, macaddr->payload);
+    }
     /* insert into the used ring */
     error = enqueue_used(&net_client_tx_ring, addr, size, NULL);
     if (error) {
@@ -147,7 +161,7 @@ static bool net_client_tx(void *buf, uint32_t size)
     return true;
 }
 
-int net_client_rx(void)
+bool net_client_rx(void)
 {
     uintptr_t addr;
     unsigned int len;
@@ -158,20 +172,19 @@ int net_client_rx(void)
         // RX used ring is empty, this is not suppose to happend!
         assert(!error);
 
-        struct ether_addr *macaddr = (struct ether_addr *)addr;
-        // printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
-        //         microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
-
-        if (!mac802_addr_eq_bcast(macaddr->ether_dest_addr_octet)) {
-            // printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR"\n",
-            // microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr));
-            virtio_net_mmio_handle_rx((void *)addr, len);
-        }
-
+        // struct ether_addr *macaddr = (struct ether_addr *)addr;
+        // if (macaddr->etype[0] & 0x8 && macaddr->etype[1] & 0x6) {
+        //     printf("\"%s\"|VIRTIO MMIO|INFO: incoming, dest MAC: "PR_MAC802_ADDR", src MAC: "PR_MAC802_ADDR", type: 0x%02x%02x\n",
+        //             microkit_name, PR_MAC802_DEST_ADDR_ARGS(macaddr), PR_MAC802_SRC_ADDR_ARGS(macaddr),
+        //             macaddr->etype[0], macaddr->etype[1]);
+        //     dump_payload(len - 14, macaddr->payload);
+        // }
+        // @jade: handle errors
+        virtio_net_mmio_handle_rx((void *)addr, len);
         enqueue_avail(&net_client_rx_ring, addr, SHMEM_BUF_SIZE, NULL);
     }
 
-    return 0;
+    return true;
 }
 
 void virtio_net_mmio_ack(uint64_t vcpu_id, int irq, void *cookie) {
@@ -361,11 +374,11 @@ static int virtio_net_mmio_handle_queue_notify_tx()
 }
 
 // handle rx from client
-static int virtio_net_mmio_handle_rx(void *buf, uint32_t size)
+static bool virtio_net_mmio_handle_rx(void *buf, uint32_t size)
 {
     if (!vqs[RX_QUEUE].ready) {
         // vq is not initialised, drop the packet
-        return 1;
+        return false;
     }
     struct vring *vring = &vqs[RX_QUEUE].vring;
 
@@ -375,7 +388,7 @@ static int virtio_net_mmio_handle_rx(void *buf, uint32_t size)
 
     if (idx == guest_idx) {
         // vq is full or not fully initialised (in this case idx and guest_idx are both 0s), drop the packet
-        return 1;
+        return false;
     }
 
     struct virtio_net_hdr_mrg_rxbuf virtio_hdr = {0};
@@ -462,7 +475,7 @@ static int virtio_net_mmio_handle_rx(void *buf, uint32_t size)
     // we can't inject irqs?? panic.
     assert(success);
 
-    return 0;
+    return true;
 }
 
 static virtio_mmio_funs_t mmio_funs = {

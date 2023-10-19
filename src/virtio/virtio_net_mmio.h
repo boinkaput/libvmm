@@ -19,7 +19,7 @@ void virtio_net_mmio_ack(uint64_t vcpu_id, int irq, void *cookie);
 
 virtio_mmio_handler_t *get_virtio_net_mmio_handler(void);
 
-int net_client_rx(void);
+bool net_client_rx(void);
 
 void virtio_net_mmio_init(uintptr_t net_tx_avail, uintptr_t net_tx_used,
                           uintptr_t net_rx_avail, uintptr_t net_rx_used, uintptr_t net_shared_dma_vaddr);

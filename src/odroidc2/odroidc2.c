@@ -8,29 +8,10 @@
 #include <microkit.h>
 #include <sel4/sel4.h>
 #include "./include/odroidc2.h"
+#include "./include/phy.h"
 #include "../libsharedringbuffer/include/shared_ringbuffer.h"
 #include "../util/util.h"
 #include "../util/printf.h"
-
-static char
-hexchar(unsigned int v)
-{
-    return v < 10 ? '0' + v : ('a' - 10) + v;
-}
-
-static void
-puthex64(uint64_t val)
-{
-    char buffer[16 + 3];
-    buffer[0] = '0';
-    buffer[1] = 'x';
-    buffer[16 + 3 - 1] = 0;
-    for (unsigned i = 16 + 1; i > 1; i--) {
-        buffer[i] = hexchar(val & 0xf);
-        val >>= 4;
-    }
-    microkit_dbg_puts(buffer);
-}
 
 #define IRQ_2  0
 #define IRQ_CH 1
@@ -370,6 +351,7 @@ handle_eth(volatile struct eth_dma_regs *eth_dma)
 
     while (e & DMA_INTR_DEFAULT_MASK) {
         if (e & DMA_INTR_ENA_TIE) {
+            printf("complete tx\n");
             complete_tx();
         }
         if (e & DMA_INTR_ENA_RIE) {
@@ -400,6 +382,17 @@ handle_eth(volatile struct eth_dma_regs *eth_dma)
     }
 }
 
+static void dump_payload(int len, uint8_t *buffer)
+{
+    printf("-------------------- payload start --------------------\n");
+    for (int i = 0; i < len; i++) {
+        printf("%02x ", buffer[i]);
+    }
+    printf("\n");
+    printf("--------------------- payload end ---------------------\n");
+    printf("\n\n");
+}
+
 static void 
 handle_tx()
 {
@@ -409,6 +402,7 @@ handle_tx()
 
     // We need to put in an empty condition here. 
     while ((tx.remain > 1) && !driver_dequeue(tx_ring.used_ring, &buffer, &len, &cookie)) {
+        dump_payload(len, (uint8_t *)buffer);
         uintptr_t phys = getPhysAddr(buffer);
         raw_tx(1, &phys, &len, cookie);
     }
@@ -495,6 +489,13 @@ void init_post()
     /* Disable uneeded GMAC irqs */
     eth_mac->intmask |= GMAC_INT_DEFAULT_MASK;
 
+    /* enable PHY */
+    /* @jade: seems like uboot has initialised the PHY for us, but I am not sure:
+     * 1. if uboot does that properly
+     * 2. if we should rely on uboot doing the initialisation for us 
+     * 3. if this is the cause of the bug I am currently debugging
+     */
+
     /* We are ready to receive. Enable. */
     eth_mac->conf |= RXENABLE | TXENABLE;
     eth_dma->opmode |= TXSTART | RXSTART;
@@ -555,6 +556,7 @@ void notified(microkit_channel ch)
             have_signal = true;
             signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
             signal = (BASE_IRQ_CAP + IRQ_CH);
+            return;
         case INIT:
             init_post();
             break;

@@ -47,6 +47,10 @@
 #define LOG_VMM(...) do{ printf("%s|INFO: ", microkit_name); printf(__VA_ARGS__); }while(0)
 #define LOG_VMM_ERR(...) do{ printf("%s|ERROR: ", microkit_name); printf(__VA_ARGS__); }while(0)
 
+char hexchar(unsigned int v);
+
+void puthex64(uint64_t val);
+
 static void *memcpy(void *restrict dest, const void *restrict src, size_t n)
 {
     unsigned char *d = dest;

@@ -1,4 +1,14 @@
+/*
+ * Copyright 2023, UNSW
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#include "./include/bitops.h"
 #include "./include/phy.h"
+#include "../util/util.h"
+#include "../util/printf.h"
+
+int phy_read(struct eth_mac_regs *eth_mac, int addr, int devad, int reg);
 
 /**
  * get_phy_id - reads the specified addr for its ID.
@@ -49,15 +59,15 @@ get_phy_addr(struct eth_mac_regs *eth_mac)
             int r = get_phy_id(eth_mac, addr, i ? i : MDIO_DEVAD_NONE, &phy_id);
             /* If the PHY ID is mostly f's, we didn't find anything */
             if (r == 0 && (phy_id & 0x1fffffff) != 0x1fffffff) {
-                print("Phy addr: ");
+                printf("Phy addr: ");
                 puthex64(addr);
-                print("\n");
+                printf("\n");
                 return addr;
             }
             mask &= ~(1 << addr);
         }
     }
-    print("Phy addr: -1");
+    printf("Phy addr: -1");
     return -1;
 }
                                     
@@ -122,7 +132,7 @@ phy_reset(struct eth_mac_regs *eth_mac, int phy_addr)
     int devad = MDIO_DEVAD_NONE;
 
     if (phy_write(eth_mac, phy_addr, devad, MII_BMCR, BMCR_RESET) < 0) {
-        print("PHY reset failed\n");
+        printf("PHY reset failed\n");
         return;
     }
 
@@ -136,14 +146,14 @@ phy_reset(struct eth_mac_regs *eth_mac, int phy_addr)
         reg = phy_read(eth_mac, phy_addr, devad, MII_BMCR);
 
         if (reg < 0) {
-            print("PHY status read failed\n");
+            printf("PHY status read failed\n");
             return;
         }
         udelay(1000);
     }
 
     if (reg & BMCR_RESET) {
-        print("PHY reset timed out\n");
+        printf("PHY reset timed out\n");
         return;
     }
 
@@ -213,8 +223,9 @@ update_link(struct eth_mac_regs *eth_mac, int phy_addr)
 uint32_t
 phy_startup(struct eth_mac_regs *eth_mac, int phy_addr)
 {
+    printf("phy_startup!!!!!!!!!!!!!!\n");
     if (update_link(eth_mac, phy_addr) < 0) {
-        print("Link isn't up\n");
+        printf("Link isn't up\n");
     }
 
     unsigned int speed;
@@ -227,12 +238,12 @@ phy_startup(struct eth_mac_regs *eth_mac, int phy_addr)
 
     while (!(mii_reg & MIIM_RTL8211F_PHYSTAT_LINK)) {
         if (i > PHY_AUTONEGOTIATE_TIMEOUT) {
-            print(" Status time out !\n");
+            printf(" Status time out !\n");
             break;
         }
 
         if ((i++ % 1000) == 0) {
-            print('.');
+            printf(".");
         }
         udelay(1000);
         mii_reg = phy_read(eth_mac, phy_addr, MDIO_DEVAD_NONE,
