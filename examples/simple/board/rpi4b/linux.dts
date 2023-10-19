@@ -19,6 +19,11 @@
 
 	chosen {
 		stdout-path = "serial1:115200n8";
+        bootargs = "console=ttyAML0,115200n8 root=/dev/ram0 nosmp rw debug loglevel=8 earlyprintk=serial maxcpus=1";
+		linux,stdout-path = "/soc/serial@7e215040";
+		/* @ivanv come back to, don't understand why the rootfs is 21MB */
+		linux,initrd-start = <0x2d700000>;
+		linux,initrd-end = <0x2f000000>;
 	};
 
 	reserved-memory {
@@ -1033,7 +1038,7 @@
 			interrupt-controller;
 			#interrupt-cells = <0x03>;
 			compatible = "arm,gic-400";
-			reg = <0x40041000 0x1000 0x40042000 0x2000 0x40044000 0x2000 0x40046000 0x2000>;
+			reg = <0xff841000 0x1000 0xff842000 0x2000 0xff844000 0x2000 0xff846000 0x2000>;
 			interrupts = <0x01 0x09 0xf04>;
 			phandle = <0x01>;
 		};
@@ -1613,9 +1618,9 @@
 		};
 	};
 
-	memory@0 {
+	memory@20000000 {
+		reg = <0x00 0x20000000 0x00 0x40000000>;
 		device_type = "memory";
-		reg = <0x00 0x00 0x00>;
 	};
 
 	wifi-pwrseq {

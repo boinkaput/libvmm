@@ -387,8 +387,13 @@ bool fault_handle_vm_exception(size_t vcpu_id)
     }
 }
 
+#define LOG_FAULT(...) do{ printf("%s|FAULT: ", microkit_name); printf(__VA_ARGS__); }while(0)
+
 bool fault_handle(size_t vcpu_id, microkit_msginfo msginfo) {
     size_t label = microkit_msginfo_get_label(msginfo);
+
+    LOG_FAULT("handling %s fault\n", fault_to_string(label));
+
     bool success = false;
     switch (label) {
         case seL4_Fault_VMFault:

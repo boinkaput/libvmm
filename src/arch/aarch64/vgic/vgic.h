@@ -22,8 +22,12 @@
 #elif defined(BOARD_odroidc4)
 #define GIC_V2
 #define GIC_DIST_PADDR      0xffc01000
-#elif defined(BOARD_rpi4b_hyp)
+#elif defined(BOARD_rpi4b)
 #define GIC_V2
+/*
+ * Note that the memory address of the GIC distributor from the ARM core's view
+ * of memory.
+ */
 #define GIC_DIST_PADDR      0xff841000
 #elif defined(BOARD_imx8mm_evk_hyp)
 #define GIC_V3
