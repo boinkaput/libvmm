@@ -19,7 +19,7 @@
 
 	chosen {
 		stdout-path = "serial1:115200n8";
-        bootargs = "console=ttyAML0,115200n8 root=/dev/ram0 nosmp rw debug loglevel=8 earlyprintk=serial maxcpus=1";
+        bootargs = "earlycon=uart8250,mmio32,0xfe215040 8250.nr_uarts=1 console=ttyAML0,115200n8 root=/dev/ram0 nosmp rw debug loglevel=8 earlyprintk=serial maxcpus=1";
 		linux,stdout-path = "/soc/serial@7e215040";
 		/* @ivanv come back to, don't understand why the rootfs is 21MB */
 		linux,initrd-start = <0x2d700000>;
@@ -36,7 +36,7 @@
 			size = <0x4000000>;
 			reusable;
 			linux,cma-default;
-			alloc-ranges = <0x00 0x00 0x40000000>;
+			alloc-ranges = <0x00 0x0 0x40000000>;
 		};
 
 		nvram@0 {
@@ -919,7 +919,7 @@
 
 		serial@7e215040 {
 			compatible = "brcm,bcm2835-aux-uart";
-			reg = <0x7e215040 0x40>;
+			reg = <0xfe215040 0x40>;
 			interrupts = <0x00 0x5d 0x04>;
 			clocks = <0x0d 0x00>;
 			status = "okay";
