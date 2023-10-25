@@ -11,7 +11,8 @@
 #include <microkit.h>
 #include "printf.h"
 
-#define BIT_LOW(n) (1ul<<(n))
+#define BIT(n) (1ul<<(n))
+#define BIT_LOW BIT
 #define BIT_HIGH(n) (1ul<<(n - 32 ))
 #define REG_RANGE(r0, r1)   r0 ... (r1 - 1)
 
@@ -46,6 +47,7 @@
 
 #define LOG_VMM(...) do{ printf("%s|INFO: ", microkit_name); printf(__VA_ARGS__); }while(0)
 #define LOG_VMM_ERR(...) do{ printf("%s|ERROR: ", microkit_name); printf(__VA_ARGS__); }while(0)
+
 
 char hexchar(unsigned int v);
 

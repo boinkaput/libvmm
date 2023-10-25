@@ -8,10 +8,15 @@
 #include <microkit.h>
 #include <sel4/sel4.h>
 #include "./include/odroidc2.h"
+#include "./include/miiphy.h"
 #include "./include/phy.h"
+#include "./include/net.h"
+#include "./include/designware.h"
+#include "./include/io.h"
 #include "../libsharedringbuffer/include/shared_ringbuffer.h"
 #include "../util/util.h"
 #include "../util/printf.h"
+#include "../util/fence.h"
 
 #define IRQ_2  0
 #define IRQ_CH 1
@@ -30,7 +35,7 @@ uintptr_t rx_avail;
 uintptr_t rx_used;
 uintptr_t tx_avail;
 uintptr_t tx_used;
-// uintptr_t uart_base;
+uintptr_t eth0_vaddr;
 
 /* Make the minimum frame buffer 2k. This is a bit of a waste of memory, but ensures alignment */
 #define PACKET_BUFFER_SIZE  2048
@@ -71,6 +76,8 @@ static uint8_t mac[6];
 
 volatile struct eth_mac_regs *eth_mac = (void *)(uintptr_t)0x2000000;
 volatile struct eth_dma_regs *eth_dma = (void *)(uintptr_t)0x2000000 + DW_DMA_BASE_OFFSET;
+
+struct phy_device *phydev;
 
 static void get_mac_addr(volatile struct eth_mac_regs *reg, uint8_t *mac)
 {
@@ -304,7 +311,7 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
         }
     }
 
-    __sync_synchronize();
+    THREAD_MEMORY_FENCE();
 
     unsigned int tail = ring->tail;
     unsigned int tail_new = tail;
@@ -332,7 +339,7 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
     /* There is a race condition here if add/remove is not synchronized. */
     ring->remain -= num;
 
-    __sync_synchronize();
+    THREAD_MEMORY_FENCE();
 
     if (!(eth_mac->conf & TXENABLE)) {
         eth_mac->conf |= TXENABLE;
@@ -408,6 +415,79 @@ handle_tx()
     }
 }
 
+static int dw_mdio_read(struct mii_dev *bus, int addr, int devad, int reg)
+{
+    volatile struct eth_mac_regs *mac_p = bus->priv;
+    uint16_t miiaddr;
+    miiaddr = ((addr << MIIADDRSHIFT) & MII_ADDRMSK) |
+              ((reg << MIIREGSHIFT) & MII_REGMSK);
+
+    writel(miiaddr | MII_CLKRANGE_150_250M | MII_BUSY, &mac_p->miiaddr);
+
+    for (int i = 0; i < 10; i++) {
+        if (!(readl(&mac_p->miiaddr) & MII_BUSY)) {
+            return readl(&mac_p->miidata);
+        }
+        uboot_udelay(10);
+    };
+
+    return -1;
+}
+
+static int dw_mdio_write(struct mii_dev *bus, int addr, int devad, int reg,
+                         uint16_t val)
+{
+    volatile struct eth_mac_regs *mac_p = bus->priv;
+    uint16_t miiaddr;
+
+    writel(val, &mac_p->miidata);
+    miiaddr = ((addr << MIIADDRSHIFT) & MII_ADDRMSK) |
+              ((reg << MIIREGSHIFT) & MII_REGMSK) | MII_WRITE;
+
+    writel(miiaddr | MII_CLKRANGE_150_250M | MII_BUSY, &mac_p->miiaddr);
+
+    for (int i = 0; i < 10; i++) {
+        if (!(readl(&mac_p->miiaddr) & MII_BUSY)) {
+            return 0;
+        }
+        uboot_udelay(10);
+    };
+
+    return -1;
+}
+
+static int dw_adjust_link(volatile struct eth_mac_regs *mac_p, struct phy_device *phydev)
+{
+    u32 conf = readl(&mac_p->conf) | FRAMEBURSTENABLE | DISABLERXOWN;
+
+    if (!phydev->link) {
+        printf("%s: No link.\n", phydev->dev->name);
+        return 0;
+    }
+
+    if (phydev->speed != 1000) {
+        conf |= MII_PORTSELECT;
+    } else {
+        conf &= ~MII_PORTSELECT;
+    }
+
+    if (phydev->speed == 100) {
+        conf |= FES_100;
+    }
+
+    if (phydev->duplex) {
+        conf |= FULLDPLXMODE;
+    }
+
+    writel(conf, &mac_p->conf);
+
+    printf("Speed: %d, %s duplex%s\n", phydev->speed,
+           (phydev->duplex) ? "full" : "half",
+           (phydev->port == PORT_FIBRE) ? ", fiber mode" : "");
+
+    return 0;
+}
+
 static void 
 eth_setup(void)
 {
@@ -460,6 +540,45 @@ eth_setup(void)
         tx.descr[i].addr = 0;
     }
 
+    /* Initialise the MII abstraction layer */
+    miiphy_init();
+
+    /* Initialise the actual Realtek PHY */
+    phy_init();
+
+    struct mii_dev *bus = mdio_alloc();
+    assert(bus);
+
+    bus->read = dw_mdio_read;
+    bus->write = dw_mdio_write;
+    snprintf(bus->name, sizeof(bus->name), "dwmac.%lx", eth0_vaddr);
+
+    bus->priv = eth_mac;
+
+    mdio_register(bus);
+
+    mdio_list_devices();
+    // bus = miiphy_get_dev_by_name(bus->name);
+    // assert(bus);
+
+    int mask = 0xffffffff;
+
+    phydev = phy_find_by_mask(bus, mask, 0);
+    assert(phydev);
+    phy_reset(phydev);
+
+    phydev->supported &= PHY_GBIT_FEATURES;
+    // if (priv->max_speed) {
+    //     ret = phy_set_supported(phydev, priv->max_speed);
+    //     if (ret) {
+    //         printf("something went wrong\n");
+    //         return;
+    //     }
+    // }
+    phydev->advertising = phydev->supported;
+
+    phy_config(phydev);
+
     /* Perform reset */
     eth_dma->busmode |= DMAMAC_SRST;
     while (eth_dma->busmode & DMAMAC_SRST);
@@ -489,12 +608,12 @@ void init_post()
     /* Disable uneeded GMAC irqs */
     eth_mac->intmask |= GMAC_INT_DEFAULT_MASK;
 
-    /* enable PHY */
-    /* @jade: seems like uboot has initialised the PHY for us, but I am not sure:
-     * 1. if uboot does that properly
-     * 2. if we should rely on uboot doing the initialisation for us 
-     * 3. if this is the cause of the bug I am currently debugging
-     */
+    /* Start up the PHY */
+    int ret = phy_startup(phydev);
+    assert(ret == 0);
+
+    ret = dw_adjust_link(eth_mac, phydev);
+    assert(ret == 0);
 
     /* We are ready to receive. Enable. */
     eth_mac->conf |= RXENABLE | TXENABLE;
@@ -552,6 +671,7 @@ void notified(microkit_channel ch)
             signal = (BASE_IRQ_CAP + IRQ_CH);
             return;
         case IRQ_2:
+            printf("phy!\n");
             handle_eth(eth_dma);
             have_signal = true;
             signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);

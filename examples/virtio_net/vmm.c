@@ -19,6 +19,7 @@
 #include "virtio/virtio_mem.h"
 #include "virtio/virtio_mmio.h"
 #include "virtio/virtio_net_mmio.h"
+#include <sel4/sel4.h>
 
 #if defined(BOARD_qemu_arm_virt)
 #define GUEST_RAM_SIZE 0x10000000
@@ -111,6 +112,7 @@ void init(void) {
     virtio_net_mmio_init(net_client_tx_avail, net_client_tx_used, 
                          net_client_rx_avail, net_client_rx_used, net_client_shared_dma_vaddr);
     virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_net_mmio_ack, NULL);
+    seL4_Wait(1, NULL);
 
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);

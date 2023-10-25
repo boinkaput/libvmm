@@ -75,7 +75,7 @@ REPORT_FILE = $(BUILD_DIR)/report.txt
 VMM_OBJS := vmm.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o vmm_package_guest_images.o tcb.o vcpu.o
 VMM_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o
 
-ETH_OBJS := odroidc2.o phy.o shared_ringbuffer.o util.o printf.o
+ETH_OBJS := odroidc2.o phy.o realtek.o miiphyutil.o shared_ringbuffer.o util.o printf.o
 
 # Toolchain flags
 # FIXME: For optimisation we should consider providing the flag -mcpu.
