@@ -141,6 +141,7 @@ static void update_ring_slot(
     /* Ensure all writes to the descriptor complete, before we set the flags
      * that makes hardware aware of this slot.
      */
+    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 }
 
@@ -162,7 +163,9 @@ alloc_rx_buf(size_t buf_size, void **cookie)
 static void fill_rx_bufs()
 {
     ring_ctx_t *ring = &rx;
+    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
+
     while (ring->remain > 0) {
         /* request a buffer */
         void *cookie = NULL;
@@ -180,10 +183,12 @@ static void fill_rx_bufs()
         }
         ring->cookies[idx] = cookie;
         update_ring_slot(ring, idx, status, cntl, phys);
+        THREAD_MEMORY_RELEASE();
         ring->tail = new_tail;
         /* There is a race condition if add/remove is not synchronized. */
         ring->remain--;
     }
+    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 
     if (ring->tail != ring->head) {
@@ -208,7 +213,9 @@ handle_rx()
         volatile struct descriptor *d = &(ring->descr[head]);
         unsigned int status = d->status;
         /* Ensure no memory references get ordered before we checked the descriptor was written back */
+        // THREAD_MEMORY_FENCE();
         __sync_synchronize();
+
         /* If the slot is still marked as ready we are done. */
         if (status & DESC_RXSTS_OWNBYDMA) {
             break;
@@ -226,6 +233,8 @@ handle_rx()
         /* There is a race condition here if add/remove is not synchronized. */
         ring->remain++;
 
+        THREAD_MEMORY_RELEASE();
+        
         buff_desc_t *desc = (buff_desc_t *)cookie;
 
         enqueue_used(&rx_ring, desc->encoded_addr, len, desc->cookie);
@@ -279,6 +288,8 @@ complete_tx()
             ring->head = head;
             /* race condition if add/remove is not synchronized. */
             ring->remain += cnt_org;
+            THREAD_MEMORY_RELEASE();
+
             /* give the buffer back */
             buff_desc_t *desc = (buff_desc_t *)cookie;
 
@@ -311,7 +322,8 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
         }
     }
 
-    THREAD_MEMORY_FENCE();
+    // THREAD_MEMORY_FENCE();
+    __sync_synchronize();
 
     unsigned int tail = ring->tail;
     unsigned int tail_new = tail;
@@ -331,6 +343,7 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
             printf("CPU not owner of frame!");
         }
         update_ring_slot(ring, idx, DESC_TXSTS_OWNBYDMA, cntl, *phys++);
+        THREAD_MEMORY_RELEASE();
     }
 
     ring->cookies[tail] = cookie;
@@ -339,7 +352,8 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
     /* There is a race condition here if add/remove is not synchronized. */
     ring->remain -= num;
 
-    THREAD_MEMORY_FENCE();
+    // THREAD_MEMORY_FENCE();
+    __sync_synchronize();
 
     if (!(eth_mac->conf & TXENABLE)) {
         eth_mac->conf |= TXENABLE;
@@ -347,6 +361,8 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
 
     /* Start the transmission */
 	eth_dma->txpolldemand = POLL_DATA;
+    // THREAD_MEMORY_FENCE();
+    __sync_synchronize();
 }
 
 static void 
@@ -411,6 +427,7 @@ handle_tx()
     while ((tx.remain > 1) && !driver_dequeue(tx_ring.used_ring, &buffer, &len, &cookie)) {
         dump_payload(len, (uint8_t *)buffer);
         uintptr_t phys = getPhysAddr(buffer);
+        printf("physical address: %p\n", phys);
         raw_tx(1, &phys, &len, cookie);
     }
 }
@@ -430,7 +447,7 @@ static int dw_mdio_read(struct mii_dev *bus, int addr, int devad, int reg)
         }
         uboot_udelay(10);
     };
-
+    printf("dw_mdio_read fail\n");
     return -1;
 }
 
@@ -453,6 +470,7 @@ static int dw_mdio_write(struct mii_dev *bus, int addr, int devad, int reg,
         uboot_udelay(10);
     };
 
+    printf("dw_mdio_write fail\n");
     return -1;
 }
 
@@ -575,6 +593,7 @@ eth_setup(void)
     //         return;
     //     }
     // }
+    phydev->supported |= PHY_1000BT_FEATURES;
     phydev->advertising = phydev->supported;
 
     phy_config(phydev);

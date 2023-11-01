@@ -300,40 +300,40 @@ static int rtl8211f_startup(struct phy_device *phydev)
     return rtl8211f_parse_status(phydev);
 }
 
-/* Support for RTL8211B PHY */
-static struct phy_driver RTL8211B_driver = {
-    .name = "RealTek RTL8211B",
-    .uid = 0x1cc912,
-    .mask = 0xffffff,
-    .features = PHY_GBIT_FEATURES,
-    .probe = &rtl8211b_probe,
-    .config = &rtl8211x_config,
-    .startup = &rtl8211x_startup,
-    .shutdown = &genphy_shutdown,
-};
+// /* Support for RTL8211B PHY */
+// static struct phy_driver RTL8211B_driver = {
+//     .name = "RealTek RTL8211B",
+//     .uid = 0x1cc912,
+//     .mask = 0xffffff,
+//     .features = PHY_GBIT_FEATURES,
+//     .probe = &rtl8211b_probe,
+//     .config = &rtl8211x_config,
+//     .startup = &rtl8211x_startup,
+//     .shutdown = &genphy_shutdown,
+// };
 
-/* Support for RTL8211E-VB-CG, RTL8211E-VL-CG and RTL8211EG-VB-CG PHYs */
-static struct phy_driver RTL8211E_driver = {
-    .name = "RealTek RTL8211E",
-    .uid = 0x1cc915,
-    .mask = 0xffffff,
-    .features = PHY_GBIT_FEATURES,
-    .probe = &rtl8211e_probe,
-    .config = &rtl8211x_config,
-    .startup = &rtl8211e_startup,
-    .shutdown = &genphy_shutdown,
-};
+// /* Support for RTL8211E-VB-CG, RTL8211E-VL-CG and RTL8211EG-VB-CG PHYs */
+// static struct phy_driver RTL8211E_driver = {
+//     .name = "RealTek RTL8211E",
+//     .uid = 0x1cc915,
+//     .mask = 0xffffff,
+//     .features = PHY_GBIT_FEATURES,
+//     .probe = &rtl8211e_probe,
+//     .config = &rtl8211x_config,
+//     .startup = &rtl8211e_startup,
+//     .shutdown = &genphy_shutdown,
+// };
 
-/* Support for RTL8211DN PHY */
-static struct phy_driver RTL8211DN_driver = {
-    .name = "RealTek RTL8211DN",
-    .uid = 0x1cc914,
-    .mask = 0xffffff,
-    .features = PHY_GBIT_FEATURES,
-    .config = &rtl8211x_config,
-    .startup = &rtl8211x_startup,
-    .shutdown = &genphy_shutdown,
-};
+// /* Support for RTL8211DN PHY */
+// static struct phy_driver RTL8211DN_driver = {
+//     .name = "RealTek RTL8211DN",
+//     .uid = 0x1cc914,
+//     .mask = 0xffffff,
+//     .features = PHY_GBIT_FEATURES,
+//     .config = &rtl8211x_config,
+//     .startup = &rtl8211x_startup,
+//     .shutdown = &genphy_shutdown,
+// };
 
 /* Support for RTL8211F PHY */
 static struct phy_driver RTL8211F_driver = {
@@ -348,10 +348,10 @@ static struct phy_driver RTL8211F_driver = {
 
 int phy_realtek_init(void)
 {
-    phy_register(&RTL8211B_driver);
-    phy_register(&RTL8211E_driver);
+    // phy_register(&RTL8211B_driver);
+    // phy_register(&RTL8211E_driver);
     phy_register(&RTL8211F_driver);
-    phy_register(&RTL8211DN_driver);
+    // phy_register(&RTL8211DN_driver);
 
     return 0;
 }

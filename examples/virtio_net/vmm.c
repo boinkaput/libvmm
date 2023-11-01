@@ -103,6 +103,7 @@ void init(void) {
     register_passthrough_irq(33, 1);
 #elif defined(BOARD_odroidc4)
     register_passthrough_irq(225, 1);
+    register_passthrough_irq(5, 2);
 #endif
 
     // Register virtio_mmio faults
@@ -112,7 +113,6 @@ void init(void) {
     virtio_net_mmio_init(net_client_tx_avail, net_client_tx_used, 
                          net_client_rx_avail, net_client_rx_used, net_client_shared_dma_vaddr);
     virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_net_mmio_ack, NULL);
-    seL4_Wait(1, NULL);
 
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);

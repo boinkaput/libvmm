@@ -55,6 +55,7 @@
 
         <!-- Serial IRQ -->
         <irq irq="225" id="1" trigger="edge" />
+        <irq irq="5" id="3" />
     </protection_domain>
 
     <protection_domain name="eth" priority="101" budget="160" period="300" pp="true">
