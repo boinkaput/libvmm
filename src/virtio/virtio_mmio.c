@@ -11,6 +11,7 @@
 #include "virtio_mem.h"
 #include "virtio_net_mmio.h"
 // #include "virtio_gpu.h"
+#include "virtio_blk_mmio.h"
 
 // @jade: add some giant comments about this file
 // generic virtio mmio interface
@@ -25,6 +26,8 @@ static virtio_mmio_handler_t *get_mmio_handler_by_address(uint64_t addr)
         return get_virtio_net_mmio_handler();
     // case REG_RANGE(VIRTIO_GPU_ADDRESS_START, VIRTIO_GPU_ADDRESS_END):
     //     return get_virtio_gpu_mmio_handler();
+    case REG_RANGE(VIRTIO_BLK_ADDRESS_START, VIRTIO_BLK_ADDRESS_END):
+        return get_virtio_blk_mmio_handler();
     default:
         return NULL;
     }
@@ -37,6 +40,8 @@ static uint32_t get_device_offset(uint64_t addr)
         return VIRTIO_NET_ADDRESS_START;
     // case REG_RANGE(VIRTIO_GPU_ADDRESS_START, VIRTIO_GPU_ADDRESS_END):
     //     return VIRTIO_GPU_ADDRESS_START;
+    case REG_RANGE(VIRTIO_BLK_ADDRESS_START, VIRTIO_BLK_ADDRESS_END):
+        return VIRTIO_BLK_ADDRESS_START;
     default:
         return -1;
     }
