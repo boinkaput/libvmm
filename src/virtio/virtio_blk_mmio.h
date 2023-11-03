@@ -8,7 +8,11 @@
 
 #include "virtio/virtio_mmio.h"
 
-#define VIRTIO_BLK_MMIO_NUM_VIRTQUEUE   2
+#define VIRTIO_BLK_MMIO_NUM_VIRTQUEUE   1
+
+#define DEFAULT_QUEUE 0
+
+#define VIRTIO_BLK_CAPACITY             0x100
 
 void virtio_blk_mmio_ack(uint64_t vcpu_id, int irq, void *cookie);
 

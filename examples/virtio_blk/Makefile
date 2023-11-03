@@ -66,7 +66,8 @@ DTS := $(IMAGE_DIR)/linux.dts
 DTB := $(BUILD_DIR)/linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
-ELFS := vmm1.elf vmm2.elf
+ELFS := vmm1.elf
+# ELFS := vmm1.elf vmm2.elf
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
@@ -150,8 +151,8 @@ $(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/virtio/%.c Makefile
 $(BUILD_DIR)/vmm1.elf: $(addprefix $(BUILD_DIR)/, $(VMM1_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/vmm2.elf: $(addprefix $(BUILD_DIR)/, $(VMM2_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+# $(BUILD_DIR)/vmm2.elf: $(addprefix $(BUILD_DIR)/, $(VMM2_OBJS))
+# 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION) $(IMAGE_DIR)
 	$(MICROKIT_TOOL) $(SYSTEM_DESCRIPTION) --search-path $(BUILD_DIR) $(IMAGE_DIR) --board $(BOARD) --config $(CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)

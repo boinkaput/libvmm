@@ -104,9 +104,9 @@ void init(void) {
     // Register virtio_mmio faults
     fault_register_vm_exception_handler(VIRTIO_ADDRESS_START, VIRTIO_ADDRESS_END - VIRTIO_ADDRESS_START, &virtio_mmio_handle_fault);
 
-    // Register virtio_net device
-    virtio_net_mmio_init(net_tx_avail, net_tx_used, net_tx_shared_dma_vaddr, net_rx_avail, net_rx_used, net_rx_shared_dma_vaddr);
-    virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_net_mmio_ack, NULL);
+    // Register virtio_blk device
+    virtio_blk_mmio_init();
+    virq_register(GUEST_VCPU_ID, VIRTIO_BLK_IRQ, &virtio_blk_mmio_ack, NULL);
 
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);

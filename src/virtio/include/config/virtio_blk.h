@@ -35,21 +35,28 @@
 #include <stdint.h>
 
 /* Feature bits */
-#define VIRTIO_BLK_F_BARRIER    0       /* Does host support barriers? */
-#define VIRTIO_BLK_F_SIZE_MAX   1       /* Indicates maximum segment size */
-#define VIRTIO_BLK_F_SEG_MAX    2       /* Indicates maximum # of segments */
-#define VIRTIO_BLK_F_GEOMETRY   4       /* Legacy geometry available  */
-#define VIRTIO_BLK_F_RO         5       /* Disk is read-only */
-#define VIRTIO_BLK_F_BLK_SIZE   6       /* Block size of disk is available*/
-#define VIRTIO_BLK_F_SCSI       7       /* Supports scsi command passthru */
-#define VIRTIO_BLK_F_WCE        9       /* Writeback mode enabled after reset */
-#define VIRTIO_BLK_F_TOPOLOGY   10      /* Topology information is available */
-#define VIRTIO_BLK_F_CONFIG_WCE 11      /* Writeback mode available in config */
+#define VIRTIO_BLK_F_SIZE_MAX	    1	/* Indicates maximum segment size */
+#define VIRTIO_BLK_F_SEG_MAX	    2	/* Indicates maximum # of segments */
+#define VIRTIO_BLK_F_GEOMETRY	    4	/* Legacy geometry available  */
+#define VIRTIO_BLK_F_RO		        5	/* Disk is read-only */
+#define VIRTIO_BLK_F_BLK_SIZE	    6	/* Block size of disk is available*/
+#define VIRTIO_BLK_F_FLUSH	        9	/* Flush command supported */
+#define VIRTIO_BLK_F_TOPOLOGY	    10	/* Topology information is available */
+#define VIRTIO_BLK_F_CONFIG_WCE	    11	/* Writeback mode available in config */
+#define VIRTIO_BLK_F_MQ		        12	/* support more than one vq */
+#define VIRTIO_BLK_F_DISCARD	    13	/* DISCARD is supported */
+#define VIRTIO_BLK_F_WRITE_ZEROES	14	/* WRITE ZEROES is supported */
+#define VIRTIO_BLK_F_SECURE_ERASE	16 /* Secure Erase is supported */
+#define VIRTIO_BLK_F_ZONED		    17	/* Zoned block device */
+
+/* Legacy feature bits */
+#define VIRTIO_BLK_F_BARRIER	    0	/* Does host support barriers? */
+#define VIRTIO_BLK_F_SCSI	        7	/* Supports scsi command passthru */
 
 /* Old (deprecated) name for VIRTIO_BLK_F_WCE. */
-#define VIRTIO_BLK_F_FLUSH VIRTIO_BLK_F_WCE
+#define VIRTIO_BLK_F_WCE VIRTIO_BLK_F_FLUSH
 
-#define VIRTIO_BLK_ID_BYTES     20      /* ID string length */
+#define VIRTIO_BLK_ID_BYTES         20      /* ID string length */
 
 struct virtio_blk_config {
     /* The capacity (in 512-byte sectors). */
@@ -64,22 +71,21 @@ struct virtio_blk_config {
         uint8_t heads;
         uint8_t sectors;
     } geometry;
-
     /* block size of device (if VIRTIO_BLK_F_BLK_SIZE) */
     uint32_t blk_size;
-
     /* the next 4 entries are guarded by VIRTIO_BLK_F_TOPOLOGY  */
-    /* exponent for physical block per logical block. */
-    uint8_t physical_block_exp;
-    /* alignment offset in logical blocks. */
-    uint8_t alignment_offset;
-    /* minimum I/O size without performance penalty in logical blocks. */
-    uint16_t min_io_size;
-    /* optimal sustained I/O size in logical blocks. */
-    uint32_t opt_io_size;
-
+    struct virtio_blk_topology {
+        /* exponent for physical block per logical block. */
+        uint8_t physical_block_exp;
+        /* alignment offset in logical blocks. */
+        uint8_t alignment_offset;
+        /* minimum I/O size without performance penalty in logical blocks. */
+        uint16_t min_io_size;
+        /* optimal sustained I/O size in logical blocks. */
+        uint32_t opt_io_size;
+    } topology;
     /* writeback mode (if VIRTIO_BLK_F_CONFIG_WCE) */
-    uint8_t wce;
+    uint8_t writeback;
 } __attribute__((packed));
 
 /*
@@ -94,17 +100,17 @@ struct virtio_blk_config {
  */
 
 /* These two define direction. */
-#define VIRTIO_BLK_T_IN         0
-#define VIRTIO_BLK_T_OUT        1
+#define VIRTIO_BLK_T_IN             0
+#define VIRTIO_BLK_T_OUT            1
 
 /* This bit says it's a scsi command, not an actual read or write. */
-#define VIRTIO_BLK_T_SCSI_CMD   2
+#define VIRTIO_BLK_T_SCSI_CMD       2
 
 /* Cache flush command */
-#define VIRTIO_BLK_T_FLUSH      4
+#define VIRTIO_BLK_T_FLUSH          4
 
 /* Get device ID command */
-#define VIRTIO_BLK_T_GET_ID    8
+#define VIRTIO_BLK_T_GET_ID         8
 
 /* Barrier before this op. */
 #define VIRTIO_BLK_T_BARRIER    0x80000000
@@ -127,6 +133,6 @@ struct virtio_scsi_inhdr {
 };
 
 /* And this is the final byte of the write scatter-gather list. */
-#define VIRTIO_BLK_S_OK         0
-#define VIRTIO_BLK_S_IOERR      1
-#define VIRTIO_BLK_S_UNSUPP     2
+#define VIRTIO_BLK_S_OK             0
+#define VIRTIO_BLK_S_IOERR          1
+#define VIRTIO_BLK_S_UNSUPP         2
