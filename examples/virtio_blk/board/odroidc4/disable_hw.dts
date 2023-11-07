@@ -1,0 +1,65 @@
+
+/ {
+
+	soc {
+		// ethernet@ff3f0000 {
+		// 	compatible = "amlogic,meson-g12a-dwmac\0snps,dwmac-3.70a\0snps,dwmac";
+		// 	reg = <0x00 0xff3f0000 0x00 0x10000 0x00 0xff634540 0x00 0x08>;
+		// 	interrupts = <0x00 0x08 0x04>;
+		// 	interrupt-names = "macirq";
+		// 	clocks = <0x02 0x26 0x02 0x02 0x02 0x0d 0x02 0x02>;
+		// 	clock-names = "stmmaceth\0clkin0\0clkin1\0timing-adjustment";
+		// 	rx-fifo-depth = <0x1000>;
+		// 	tx-fifo-depth = <0x800>;
+		// 	status = "okay";
+		// 	power-domains = <0x03 0x06>;
+		// 	pinctrl-0 = <0x07 0x08>;
+		// 	pinctrl-names = "default";
+		// 	phy-mode = "rgmii";
+		// 	phy-handle = <0x09>;
+		// 	amlogic,tx-delay-ns = <0x02>;
+
+		// 	mdio {
+		// 		#address-cells = <0x01>;
+		// 		#size-cells = <0x00>;
+		// 		compatible = "snps,dwmac-mdio";
+		// 		phandle = <0x13>;
+		// 	};
+		// };
+
+		/delete-node/ ethernet@ff3f0000;
+		/delete-node/ bus@ff600000;
+		/delete-node/ bus@ff800000;
+		/delete-node/ bus@ffd00000;
+		/delete-node/ usb@ffe09000;
+
+		ethernet@ff3f0000 {
+            status = "disabled";
+        };
+
+		bus@ff600000 {
+            status = "disabled";
+        };
+
+		bus@ff800000 {
+			serial@3000 {
+				compatible = "amlogic,meson-gx-uart\0amlogic,meson-ao-uart";
+				reg = <0x00 0x3000 0x00 0x18>;
+				interrupts = <0x00 0xc1 0x01>;
+				clocks = <0x11 0x19 0x04 0x11>;
+				clock-names = "xtal\0pclk\0baud";
+				status = "okay";
+				pinctrl-0 = <0x1e>;
+				pinctrl-names = "default";
+			};
+        };
+
+		bus@ffd00000 {
+            status = "disabled";
+        };
+
+		usb@ffe09000 {
+            status = "disabled";
+        };
+    };
+};
