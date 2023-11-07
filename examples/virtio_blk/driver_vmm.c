@@ -17,7 +17,7 @@
 
 /* FOR ODROIDC4 */
 #define GUEST_RAM_SIZE 0x10000000
-#define GUEST_DTB_VADDR 0x2f100000
+#define GUEST_DTB_VADDR 0x2f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
 
 /* Data for the guest's kernel image. */
