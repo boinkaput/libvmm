@@ -5,7 +5,6 @@
  */
 
 #include <stdint.h>
-// #include "include/vring/virtio_ring.h"
 #include "include/config/virtio_blk.h"
 #include "include/config/virtio_config.h"
 #include "virtio_mmio.h"
@@ -143,8 +142,27 @@ static int virtio_blk_mmio_queue_notify()
         
         // Parse different commands
         switch (cmd->type) {
+            // header -> body -> reply
             case VIRTIO_BLK_T_IN: {
+                printf("\"%s\"|VIRTIO BLK|INFO: Command type is VIRTIO_BLK_T_IN\n", microkit_name);
                 printf("\"%s\"|VIRTIO BLK|INFO: Sector (read/write offset) is %d (x512)\n", microkit_name, cmd->sector);
+                curr_desc_head = vring->desc[curr_desc_head].next;
+                printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
+                uintptr_t data = vring->desc[curr_desc_head].addr;
+                printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
+                break;
+            }
+            case VIRTIO_BLK_T_OUT: {
+                printf("\"%s\"|VIRTIO BLK|INFO: Command type is VIRTIO_BLK_T_OUT\n", microkit_name);
+                printf("\"%s\"|VIRTIO BLK|INFO: Sector (read/write offset) is %d (x512)\n", microkit_name, cmd->sector);
+                curr_desc_head = vring->desc[curr_desc_head].next;
+                printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
+                uintptr_t data = vring->desc[curr_desc_head].addr;
+                printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
+                break;
+            }
+            case VIRTIO_BLK_T_FLUSH: {
+                printf("\"%s\"|VIRTIO BLK|INFO: Command type is VIRTIO_BLK_T_FLUSH\n", microkit_name);
                 break;
             }
         }
@@ -152,17 +170,19 @@ static int virtio_blk_mmio_queue_notify()
         // For descriptor chains with more than one descriptor, the last descriptor has the VRING_DESC_F_NEXT flag set to 0
         // to indicate that it is the last descriptor in the chain. That descriptor does not seem to serve any other purpose.
         // This loop brings us to the last descriptor in the chain.
-        
         while (vring->desc[curr_desc_head].flags & VRING_DESC_F_NEXT) {
-            printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
+            // printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
             curr_desc_head = vring->desc[curr_desc_head].next;
         }
-        printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
+        // printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
 
-        // Return the proper response to the driver
-        switch (cmd->type) {
-            
-        }
+        // Respond OK for this command to the driver
+        // by writing VIRTIO_BLK_S_OK to the final descriptor address
+        *((uint8_t *)vring->desc[curr_desc_head].addr) = VIRTIO_BLK_S_OK;
+
+
+
+        
 
         // set the reason of the irq
         blk_mmio_handler.data.InterruptStatus = BIT_LOW(0);

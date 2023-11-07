@@ -62,22 +62,24 @@ SYSTEM_DESCRIPTION := board/$(BOARD)/virtio_demo.system
 
 IMAGE_DIR := board/$(BOARD)
 LINUX := $(IMAGE_DIR)/linux
-DTS := $(IMAGE_DIR)/linux.dts
-DTB := $(BUILD_DIR)/linux.dtb
+CLIENT_DTS := $(IMAGE_DIR)/client_linux.dts
+CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
+DRIVER_DTS_SOURCE := $(IMAGE_DIR)/driver_linux.dts
+DRIVER_DTS_OVERLAY := $(IMAGE_DIR)/driver_linux_overlay.dts
+DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
-ELFS := vmm1.elf
-# ELFS := vmm1.elf vmm2.elf
+ELFS := driver_vmm.elf
+# ELFS := client_vmm.elf driver_vmm.elf
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
 
 # @ivanv: should only compile printf.o in debug
-VMM1_OBJS := vmm1.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_guest_images.o tcb.o vcpu.o
-VMM1_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o virtio_blk_mmio.o
+# CLIENT_VMM_OBJS := client_vmm.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_client_guest_images.o tcb.o vcpu.o
+# CLIENT_VMM_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o virtio_blk_mmio.o
 
-VMM2_OBJS := vmm2.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_guest_images.o tcb.o vcpu.o
-# VMM2_OBJS += shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o virtio_blk_mmio.o
+DRIVER_VMM_OBJS := driver_vmm.o printf.o virq.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o vgic_v2.o package_driver_guest_images.o tcb.o vcpu.o
 
 # Toolchain flags
 # FIXME: For optimisation we should consider providing the flag -mcpu.
@@ -115,15 +117,43 @@ qemu: all
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-$(DTB): $(DTS)
+# Unpack rootfs, put the userlevel binary in /root, repack rootfs
+# test/virtio_blk_test.elf: test/virtio_blk_test.c Makefile
+# 	$(CC) test/virtio_blk_test.c -o test/virtio_blk_test.elf && \
+# 	cp $(IMAGE_DIR)/rootfs.cpio.gz ~/TS/rootfs_unpack && \
+# 	cd ~/TS/rootfs_unpack && \
+# 	rm -r rootfs 2> /dev/null; \
+# 	sh unpack.sh > /dev/null 2>&1  && \
+# 	cp ~/TS/libvmm/examples/virtio_blk/test/virtio_blk_test.elf rootfs/root && \
+# 	sh pack.sh > /dev/null /dev/null 2>&1 && \
+# 	cp rootfs.cpio.gz.new ~/TS/libvmm/examples/virtio_blk/$(IMAGE_DIR)/rootfs.cpio.gz
+
+# $(CLIENT_DTB): $(CLIENT_DTS)
+# 	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
+# 	# @ivanv: Shouldn't supress warnings
+# 	$(DTC) -q -I dts -O dtb $< > $@
+
+$(DRIVER_DTB): $(DRIVER_DTS_SOURCE)
 	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
 	# @ivanv: Shouldn't supress warnings
 	$(DTC) -q -I dts -O dtb $< > $@
 
-$(BUILD_DIR)/package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(DTB)
+# $(DRIVER_DTB): $(DRIVER_DTS_SOURCE) $(DRIVER_DTS_OVERLAY) $(BUILD_DIR)/tmp.dts
+# 	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
+# 	sh ../../scripts/dtscat $(DRIVER_DTS_SOURCE) $(DRIVER_DTS_OVERLAY) > $(BUILD_DIR)/tmp.dts 
+# 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/tmp.dts > $@
+
+# $(BUILD_DIR)/package_client_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(CLIENT_DTB)
+# 	$(CC) -c -g3 -x assembler-with-cpp \
+# 					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
+# 					-DGUEST_DTB_IMAGE_PATH=\"$(CLIENT_DTB)\" \
+# 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
+# 					$< -o $@
+
+$(BUILD_DIR)/package_driver_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(DRIVER_DTB)
 	$(CC) -c -g3 -x assembler-with-cpp \
 					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
-					-DGUEST_DTB_IMAGE_PATH=\"$(DTB)\" \
+					-DGUEST_DTB_IMAGE_PATH=\"$(DRIVER_DTB)\" \
 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
 					$< -o $@
 
@@ -148,11 +178,12 @@ $(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/libsharedringbuffer/%.c Makefile
 $(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/virtio/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/vmm1.elf: $(addprefix $(BUILD_DIR)/, $(VMM1_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-# $(BUILD_DIR)/vmm2.elf: $(addprefix $(BUILD_DIR)/, $(VMM2_OBJS))
+# $(BUILD_DIR)/client_vmm.elf: $(addprefix $(BUILD_DIR)/, $(CLIENT_VMM_OBJS))
 # 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/driver_vmm.elf: $(addprefix $(BUILD_DIR)/, $(DRIVER_VMM_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION) $(IMAGE_DIR)
 	$(MICROKIT_TOOL) $(SYSTEM_DESCRIPTION) --search-path $(BUILD_DIR) $(IMAGE_DIR) --board $(BOARD) --config $(CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+	

@@ -22,9 +22,9 @@
 #include "virtio/virtio_blk_mmio.h"
 
 #if defined(BOARD_qemu_arm_virt)
-#define GUEST_RAM_SIZE 0x10000000
-#define GUEST_DTB_VADDR 0x47000000
-#define GUEST_INIT_RAM_DISK_VADDR 0x46000000
+#define GUEST_RAM_SIZE 0xf000000
+#define GUEST_DTB_VADDR 0x4b000000
+#define GUEST_INIT_RAM_DISK_VADDR 0x4c700000
 #elif defined(BOARD_odroidc4)
 #define GUEST_RAM_SIZE 0x10000000
 #define GUEST_DTB_VADDR 0x2f000000
@@ -42,6 +42,8 @@ extern char _guest_initrd_image[];
 extern char _guest_initrd_image_end[];
 /* microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
+
+#define VSWITCH_BLK 1
 
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
@@ -63,13 +65,13 @@ static void register_passthrough_irq(int irq, microkit_channel irq_ch) {
     }
 }
 
-/* sDDF memory regions for virtio net */
-uintptr_t net_rx_avail;
-uintptr_t net_rx_used;
-uintptr_t net_tx_avail;
-uintptr_t net_tx_used;
-uintptr_t net_rx_shared_dma_vaddr;
-uintptr_t net_tx_shared_dma_vaddr;
+/* sDDF memory regions for virtio blk */
+uintptr_t cmdq_avail;
+uintptr_t cmdq_used;
+uintptr_t cmdq_shm;
+uintptr_t resp_avail;
+uintptr_t resp_used;
+uintptr_t resp_shm;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -99,7 +101,7 @@ void init(void) {
         return;
     }
 
-    register_passthrough_irq(33, 1);
+    
 
     // Register virtio_mmio faults
     fault_register_vm_exception_handler(VIRTIO_ADDRESS_START, VIRTIO_ADDRESS_END - VIRTIO_ADDRESS_START, &virtio_mmio_handle_fault);
@@ -108,12 +110,21 @@ void init(void) {
     virtio_blk_mmio_init();
     virq_register(GUEST_VCPU_ID, VIRTIO_BLK_IRQ, &virtio_blk_mmio_ack, NULL);
 
+    printf("cmdq_avail: 0x%lx\n", cmdq_avail);
+    printf("cmdq_used: 0x%lx\n", cmdq_used);
+    printf("cmdq_shm: 0x%lx\n", cmdq_shm);
+    printf("resp_avail: 0x%lx\n", resp_avail);
+    printf("resp_used: 0x%lx\n", resp_used);
+    printf("resp_shm: 0x%lx\n", resp_shm);
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
 
 void notified(microkit_channel ch) {
     switch (ch) {
+        case VSWITCH_BLK:
+            break;
         default:
             if (passthrough_irq_map[ch]) {
                 bool success = virq_inject(GUEST_VCPU_ID, passthrough_irq_map[ch]);

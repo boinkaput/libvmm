@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2022, UNSW (ABN 57 195 873 179)
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+
+<system>
+    <!-- <memory_region name="client_vm_ram" size="0xf000000" page_size="0x200_000" /> -->
+    <memory_region name="driver_vm_ram" size="0x10000000" page_size="0x200_000" phys_addr="0x20000000" />
+
+    <memory_region name="gic_vcpu" size="0x1000" phys_addr="0xffc06000" />
+    <memory_region name="bus1" size="0x200000" phys_addr="0xff600000" />
+    <!-- this bus contains the serial device -->
+    <memory_region name="bus2" size="0x200000" phys_addr="0xff800000" />
+    <memory_region name="bus3" size="0x100000" phys_addr="0xffd00000" />
+    <!-- <memory_region name="sd" size="0x1000" phys_addr="0xffe05000" /> -->
+
+    <!-- shared memory for ring buffer mechanism -->
+    <!-- <memory_region name="cmdq_avail" size="0x10_000" page_size="0x1_000"/>
+    <memory_region name="cmdq_used" size="0x10_000" page_size="0x1_000"/>
+    <memory_region name="cmdq_shm" size="0x10_000" page_size="0x1_000" />
+    <memory_region name="resp_avail" size="0x10_000" page_size="0x1_000"/>
+    <memory_region name="resp_used" size="0x10_000" page_size="0x1_000"/>
+    <memory_region name="resp_shm" size="0x10_000" page_size="0x1_000" /> -->
+
+    <!-- <protection_domain name="CLIENT_VMM" priority="254">
+        <program_image path="client_vmm.elf" />
+        <map mr="client_vm_ram" vaddr="0x20000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
+        <virtual_machine name="client_linux" id="0">
+            <map mr="client_vm_ram" vaddr="0x20000000" perms="rwx" />
+            <map mr="serial" vaddr="0xff803000" perms="rw" />
+            <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" />
+        </virtual_machine>
+
+        shared memory for ring buffer mechanism
+        @jade: the vaddrs are just random numbers that I picked, if you're using your own dts file and
+             get an `seL4_FailedLookup` error, considering change these addresses to something else
+             that make more senses.
+        <map mr="cmdq_avail" vaddr="0x5000000" perms="rw" cached="true" setvar_vaddr="cmdq_avail" />
+        <map mr="cmdq_used" vaddr="0x5200000" perms="rw" cached="true" setvar_vaddr="cmdq_used" />
+        <map mr="cmdq_shm" vaddr="0x5400000" perms="rw" cached="true" setvar_vaddr="cmdq_shm" />
+        <map mr="resp_avail" vaddr="0x5600000" perms="rw" cached="true" setvar_vaddr="resp_avail" />
+        <map mr="resp_used" vaddr="0x5800000" perms="rw" cached="true" setvar_vaddr="resp_used" />
+        <map mr="resp_shm" vaddr="0x5a00000" perms="rw" cached="true" setvar_vaddr="resp_shm" />
+
+        
+    </protection_domain> -->
+
+    <protection_domain name="DRIVER_VMM" priority="254">
+        <program_image path="driver_vmm.elf" />
+        <map mr="driver_vm_ram" vaddr="0x20000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
+        <virtual_machine name="driver_linux" id="0">
+            <map mr="driver_vm_ram" vaddr="0x20000000" perms="rwx" />
+            <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" cached="false"/>
+            <map mr="bus1" vaddr="0xff600000" perms="rw" cached="false" />
+            <map mr="bus2" vaddr="0xff800000" perms="rw" cached="false" />
+            <map mr="bus3" vaddr="0xffd00000" perms="rw" cached="false" />
+            <!-- <map mr="sd" vaddr="0xffe05000" perms="rw" cached="false"/> -->
+        </virtual_machine>
+
+        <!-- shared memory for ring buffer mechanism -->
+        <!-- <map mr="cmdq_avail" vaddr="0x5000000" perms="rw" cached="true" setvar_vaddr="cmdq_avail" />
+        <map mr="cmdq_used" vaddr="0x5010000" perms="rw" cached="true" setvar_vaddr="cmdq_used" />
+        <map mr="cmdq_shm" vaddr="0x5020000" perms="rw" cached="true" setvar_vaddr="cmdq_shm" />
+        <map mr="resp_avail" vaddr="0x5030000" perms="rw" cached="true" setvar_vaddr="resp_avail" />
+        <map mr="resp_used" vaddr="0x5040000" perms="rw" cached="true" setvar_vaddr="resp_used" />
+        <map mr="resp_shm" vaddr="0x5050000" perms="rw" cached="true" setvar_vaddr="resp_shm" /> -->
+
+        <!-- passthrough blk irq -->
+        <!-- <irq irq="222" id="3" /> -->
+
+        <!-- serial -->
+        <irq irq="225" id="1" trigger="edge" />
+    </protection_domain>
+
+    <!-- <channel>
+        <end pd="CLIENT_VMM" id="1" />
+        <end pd="DRIVER_VMM" id="1" />
+    </channel> -->
+</system>
