@@ -110,7 +110,7 @@ void init(void) {
     virq_register(GUEST_VCPU_ID, VIRTIO_BLK_IRQ, &virtio_blk_mmio_ack, NULL);
 
     // Serial passthrough
-    // register_passthrough_irq(33, 1);
+    register_passthrough_irq(33, 1);
 
     // printf("cmdq_avail: 0x%lx\n", cmdq_avail);
     // printf("cmdq_used: 0x%lx\n", cmdq_used);

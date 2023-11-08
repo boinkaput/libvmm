@@ -27,7 +27,7 @@
         <virtual_machine name="client_guest" id="0">
             <map mr="client_guest_ram" vaddr="0x40000000" perms="rwx" />
             <map mr="gic_vcpu" vaddr="0x8010000" perms="rw" cached="false" />
-            <map mr="serial" vaddr="0x9000000" perms="rw" />
+            <map mr="serial" vaddr="0x9000000" perms="rw" cached="false" />
             
             <map mr="uio_map0" vaddr="0x30000000" perms="rw" cached="false" />
             <map mr="uio_map1" vaddr="0x30002000" perms="rw" cached="false" />
@@ -48,7 +48,7 @@
         <virtual_machine name="driver_guest" id="0">
             <map mr="driver_guest_ram" vaddr="0x40000000" perms="rwx" />
             <map mr="gic_vcpu" vaddr="0x8010000" perms="rw" cached="false" />
-            <map mr="serial" vaddr="0x9000000" perms="rw" />
+            <map mr="serial" vaddr="0x9000000" perms="rw" cached="false" />
 
             <map mr="uio_map0" vaddr="0x30000000" perms="rw" cached="false" />
             <map mr="uio_map1" vaddr="0x30002000" perms="rw" cached="false" />

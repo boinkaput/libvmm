@@ -18,12 +18,8 @@ BUILD_DIR ?= build
 # Default config is a debug build, pass CONFIG=<debug/release/benchmark> to override
 CONFIG ?= debug
 
-# @ivanv: Check for dependencies and make sure they are installed/in the path
-
-# @ivanv: check that all dependencies exist
 # Specify that we use bash for all shell commands
 SHELL=/bin/bash
-# All dependencies needed to compile the VMM
 QEMU := qemu-system-aarch64
 DTC := dtc
 
@@ -45,15 +41,6 @@ CC := $(TOOLCHAIN)-gcc
 LD := $(TOOLCHAIN)-ld
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
-# @ivanv: need to have a step for putting in the initrd node into the DTB,
-# 		  right now it is unfortunately hard-coded.
-
-# @ivanv: check that the path of SDK_PATH/BOARD exists
-# @ivanv: Have a list of supported boards to check with, if it's not one of those
-# have a helpful message that lists all the support boards.
-
-# @ivanv: incremental builds don't work with IMAGE_DIR changing
-
 BOARD_DIR := $(MICROKIT_SDK)/board/$(BOARD)/$(CONFIG)
 VMM := ../../
 VMM_TOOLS := $(VMM)/tools
@@ -65,36 +52,12 @@ CLIENT_DIR := board/$(BOARD)/client
 DRIVER_DTS_DIR := $(DRIVER_DIR)/dts
 CLIENT_DTS_DIR := $(CLIENT_DIR)/dts
 
-DRIVER_LINUX := $(DRIVER_DIR)/linux
-DRIVER_INITRD := $(DRIVER_DIR)/rootfs.cpio.gz
-DRIVER_BASE_DTS := $(DRIVER_DTS_DIR)/linux.dts
-DRIVER_DTS_OVERLAYS := $(DRIVER_DTS_DIR)/init.dts $(DRIVER_DTS_DIR)/uio.dts
+DRIVER_USERLEVEL_DIR := userlevel/driver
+CLIENT_USERLEVEL_DIR := userlevel/client
 
-CLIENT_LINUX := $(CLIENT_DIR)/linux
-CLIENT_INITRD := $(CLIENT_DIR)/rootfs.cpio.gz
-CLIENT_BASE_DTS := $(CLIENT_DTS_DIR)/linux.dts
-CLIENT_DTS_OVERLAYS := $(CLIENT_DTS_DIR)/init.dts $(CLIENT_DTS_DIR)/virtio_blk.dts 
+DRIVER_ROOTFS_TMP_DIR := $(BUILD_DIR)/driver_rootfs
+CLIENT_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_rootfs
 
-DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
-CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
-
-ELFS := client_guest_vmm.elf driver_guest_vmm.elf
-
-IMAGE_FILE = $(BUILD_DIR)/loader.img
-REPORT_FILE = $(BUILD_DIR)/report.txt
-
-# @ivanv: should only compile printf.o in debug
-VMM_OBJS := printf.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o tcb.o vcpu.o vgic_v2.o virq.o
-CLIENT_VMM_OBJS := $(VMM_OBJS) client_guest_vmm.o client_guest_images.o shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o virtio_blk_mmio.o
-DRIVER_VMM_OBJS := $(VMM_OBJS) driver_guest_vmm.o driver_guest_images.o
-
-# Toolchain flags
-# FIXME: For optimisation we should consider providing the flag -mcpu.
-# FIXME: We should also consider whether -mgeneral-regs-only should be
-# used to avoid the use of the FPU and therefore seL4 does not have to
-# context switch the FPU.
-# Note we only need -Wno-unused-command-line-argument because in Nix
-# passes an extra `--gcc-toolchain` flag which we do not need.
 CFLAGS := -mstrict-align \
 		  -g3 \
 		  -O3 \
@@ -109,7 +72,33 @@ CFLAGS := -mstrict-align \
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
+DRIVER_LINUX := $(DRIVER_DIR)/linux
+DRIVER_INITRD := $(DRIVER_DIR)/rootfs.cpio.gz
+DRIVER_BASE_DTS := $(DRIVER_DTS_DIR)/linux.dts
+DRIVER_DTS_OVERLAYS := $(DRIVER_DTS_DIR)/init.dts $(DRIVER_DTS_DIR)/uio.dts
+
+CLIENT_LINUX := $(CLIENT_DIR)/linux
+CLIENT_INITRD := $(CLIENT_DIR)/rootfs.cpio.gz
+CLIENT_BASE_DTS := $(CLIENT_DTS_DIR)/linux.dts
+CLIENT_DTS_OVERLAYS := $(CLIENT_DTS_DIR)/init.dts $(CLIENT_DTS_DIR)/virtio_blk.dts 
+
+DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
+CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
+
+VMM_OBJS := printf.o linux.o guest.o psci.o smc.o fault.o util.o vgic.o tcb.o vcpu.o vgic_v2.o virq.o
+CLIENT_VMM_OBJS := $(VMM_OBJS) client_guest_vmm.o client_guest_images.o shared_ringbuffer.o virtio_mmio.o virtio_net_mmio.o virtio_blk_mmio.o
+DRIVER_VMM_OBJS := $(VMM_OBJS) driver_guest_vmm.o driver_guest_images.o
+
+ELFS := client_guest_vmm.elf driver_guest_vmm.elf
+
+IMAGE_FILE := $(BUILD_DIR)/loader.img
+REPORT_FILE := $(BUILD_DIR)/report.txt
+
+DRIVER_USERLEVEL_ELFS := cmdq_test.elf
+CLIENT_USERLEVEL_ELFS := virtio_blk_test.elf
+
 all: directories $(IMAGE_FILE)
+# all: directories driver_userlevel client_userlevel $(IMAGE_FILE) 
 
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
@@ -123,6 +112,27 @@ qemu: all
 			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
 			-m size=2G \
 			-nographic
+
+$(BUILD_DIR)/%.elf: $(DRIVER_USERLEVEL_DIR)/%.c Makefile
+	$(CC) $< -o $@
+
+$(BUILD_DIR)/%.elf: $(CLIENT_USERLEVEL_DIR)/%.c Makefile
+	$(CC) $< -o $@
+
+# Unpack rootfs, put the userlevel binary in /root, repack rootfs
+driver_userlevel: $(addprefix $(BUILD_DIR)/, $(DRIVER_USERLEVEL_ELFS))
+	rm -r $(DRIVER_ROOTFS_TMP_DIR) 2> /dev/null; \
+	mkdir -p $(DRIVER_ROOTFS_TMP_DIR) && \
+	gunzip -dc $(DRIVER_DIR)/rootfs.cpio.gz | cpio -idmv -D$(DRIVER_ROOTFS_TMP_DIR) && \
+	cp $< $(DRIVER_ROOTFS_TMP_DIR)/root && \
+	find $(DRIVER_ROOTFS_TMP_DIR) | cpio -o -H newc -R root:root | gzip > $(DRIVER_DIR)/rootfs.cpio.gz
+	
+client_userlevel: $(addprefix $(BUILD_DIR)/, $(CLIENT_USERLEVEL_ELFS))
+	rm -r $(CLIENT_ROOTFS_TMP_DIR) 2> /dev/null; \
+	mkdir -p $(CLIENT_ROOTFS_TMP_DIR) && \
+	gunzip -dc $(CLIENT_DIR)/rootfs.cpio.gz | cpio -idmv -D$(CLIENT_ROOTFS_TMP_DIR) && \
+	cp $< $(CLIENT_ROOTFS_TMP_DIR)/root && \
+	find $(CLIENT_ROOTFS_TMP_DIR) | cpio -o -H newc -R root:root | gzip > $(CLIENT_DIR)/rootfs.cpio.gz
 
 $(CLIENT_DTB): $(CLIENT_BASE_DTS) $(CLIENT_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/client_guest.dts
