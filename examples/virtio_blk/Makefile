@@ -41,11 +41,8 @@ CC := $(TOOLCHAIN)-gcc
 LD := $(TOOLCHAIN)-ld
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
+CURRENT_DIR := $(shell pwd)
 BOARD_DIR := $(MICROKIT_SDK)/board/$(BOARD)/$(CONFIG)
-VMM := ../../
-VMM_TOOLS := $(VMM)/tools
-VMM_SRC_DIR := $(VMM)/src
-SYSTEM_DESCRIPTION := board/$(BOARD)/virtio.system
 
 DRIVER_DIR := board/$(BOARD)/driver
 CLIENT_DIR := board/$(BOARD)/client
@@ -57,6 +54,10 @@ CLIENT_USERLEVEL_DIR := userlevel/client
 
 DRIVER_ROOTFS_TMP_DIR := $(BUILD_DIR)/driver_rootfs
 CLIENT_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_rootfs
+
+VMM := ../../
+VMM_TOOLS := $(VMM)/tools
+VMM_SRC_DIR := $(VMM)/src
 
 CFLAGS := -mstrict-align \
 		  -g3 \
@@ -71,6 +72,10 @@ CFLAGS := -mstrict-align \
 
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
+
+SYSTEM_DESCRIPTION := board/$(BOARD)/virtio.system
+IMAGE_FILE := $(BUILD_DIR)/loader.img
+REPORT_FILE := $(BUILD_DIR)/report.txt
 
 DRIVER_LINUX := $(DRIVER_DIR)/linux
 DRIVER_INITRD := $(DRIVER_DIR)/rootfs.cpio.gz
@@ -91,14 +96,10 @@ DRIVER_VMM_OBJS := $(VMM_OBJS) driver_guest_vmm.o driver_guest_images.o
 
 ELFS := client_guest_vmm.elf driver_guest_vmm.elf
 
-IMAGE_FILE := $(BUILD_DIR)/loader.img
-REPORT_FILE := $(BUILD_DIR)/report.txt
-
 DRIVER_USERLEVEL_ELFS := cmdq_test.elf
 CLIENT_USERLEVEL_ELFS := virtio_blk_test.elf
 
-all: directories $(IMAGE_FILE)
-# all: directories driver_userlevel client_userlevel $(IMAGE_FILE) 
+all: directories driver_userlevel client_userlevel $(IMAGE_FILE) 
 
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
@@ -123,16 +124,16 @@ $(BUILD_DIR)/%.elf: $(CLIENT_USERLEVEL_DIR)/%.c Makefile
 driver_userlevel: $(addprefix $(BUILD_DIR)/, $(DRIVER_USERLEVEL_ELFS))
 	rm -r $(DRIVER_ROOTFS_TMP_DIR) 2> /dev/null; \
 	mkdir -p $(DRIVER_ROOTFS_TMP_DIR) && \
-	gunzip -dc $(DRIVER_DIR)/rootfs.cpio.gz | cpio -idmv -D$(DRIVER_ROOTFS_TMP_DIR) && \
+	gunzip -dc $(DRIVER_INITRD) | fakeroot cpio -idmv -D$(DRIVER_ROOTFS_TMP_DIR) && \
 	cp $< $(DRIVER_ROOTFS_TMP_DIR)/root && \
-	find $(DRIVER_ROOTFS_TMP_DIR) | cpio -o -H newc -R root:root | gzip > $(DRIVER_DIR)/rootfs.cpio.gz
+	(cd $(DRIVER_ROOTFS_TMP_DIR) && find . | cpio -o -H newc -R root:root | gzip > $(CURRENT_DIR)/$(DRIVER_INITRD))
 	
 client_userlevel: $(addprefix $(BUILD_DIR)/, $(CLIENT_USERLEVEL_ELFS))
 	rm -r $(CLIENT_ROOTFS_TMP_DIR) 2> /dev/null; \
 	mkdir -p $(CLIENT_ROOTFS_TMP_DIR) && \
-	gunzip -dc $(CLIENT_DIR)/rootfs.cpio.gz | cpio -idmv -D$(CLIENT_ROOTFS_TMP_DIR) && \
+	gunzip -dc $(CLIENT_INITRD) | fakeroot cpio -idmv -D$(CLIENT_ROOTFS_TMP_DIR) 2> /dev/null && \
 	cp $< $(CLIENT_ROOTFS_TMP_DIR)/root && \
-	find $(CLIENT_ROOTFS_TMP_DIR) | cpio -o -H newc -R root:root | gzip > $(CLIENT_DIR)/rootfs.cpio.gz
+	(cd $(CLIENT_ROOTFS_TMP_DIR) && find . | cpio -o -H newc -R root:root 2> /dev/null | gzip > $(CURRENT_DIR)/$(CLIENT_INITRD))
 
 $(CLIENT_DTB): $(CLIENT_BASE_DTS) $(CLIENT_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/client_guest.dts
