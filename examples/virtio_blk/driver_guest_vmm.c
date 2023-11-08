@@ -15,10 +15,15 @@
 #include "tcb.h"
 #include "vcpu.h"
 
-/* FOR ODROIDC4 */
+#if defined(BOARD_qemu_arm_virt)
+#define GUEST_RAM_SIZE 0x10000000
+#define GUEST_DTB_VADDR 0x4f000000
+#define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
+#elif defined(BOARD_odroidc4)
 #define GUEST_RAM_SIZE 0x10000000
 #define GUEST_DTB_VADDR 0x2f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
+#endif
 
 /* Data for the guest's kernel image. */
 extern char _guest_kernel_image[];
@@ -32,10 +37,8 @@ extern char _guest_initrd_image_end[];
 /* microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
-#define PASSTHROUGH_BLK_IRQ 222
-#define PASSTHROUGH_BLK_ID 3
 #define UIO_BLK_IRQ 50
-#define VSWITCH_BLK 1
+#define VSWITCH_BLK 0
 
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
@@ -97,33 +100,14 @@ void init(void) {
         return;
     }
 
-    register_passthrough_irq(225, 1);
-    register_passthrough_irq(222, 5);   // @tim: jade had as 2
-    register_passthrough_irq(223, 3);
-    register_passthrough_irq(232, 4);
-
-    register_passthrough_irq(40, 2);   // @tim: jade had as 5
-    register_passthrough_irq(35, 15);
-
-    register_passthrough_irq(96, 6);
-    register_passthrough_irq(192, 7);
-    register_passthrough_irq(193, 8);
-    register_passthrough_irq(194, 9);
-    register_passthrough_irq(53, 10);
-    register_passthrough_irq(228, 11);
-    register_passthrough_irq(63, 12);
-    register_passthrough_irq(62, 13);
-    register_passthrough_irq(48, 16);
-    register_passthrough_irq(89, 14);
-    // @jade: this should not be necessary. Investigation required.
-    register_passthrough_irq(5, 17);
-
+    /* Register serial passthrough */
+    register_passthrough_irq(33, 1);
 
     /* Register MMC passthrough */
-    // register_passthrough_irq(PASSTHROUGH_BLK_IRQ, PASSTHROUGH_BLK_ID);
+    // register_passthrough_irq(75, 1);
 
     /* Register UIO irq */
-    // virq_register(GUEST_VCPU_ID, UIO_BLK_IRQ, &dummy_ack, NULL);
+    virq_register(GUEST_VCPU_ID, UIO_BLK_IRQ, &dummy_ack, NULL);
 
     // Silence unused sDDF variable warnings, lets just print them out for now
     // printf("cmdq_avail: 0x%lx\n", cmdq_avail);
@@ -138,10 +122,6 @@ void init(void) {
 }
 
 void notified(microkit_channel ch) {
-    if (ch == 1) {
-        printf("SERIAL IRQ\n");
-    }
-
     switch (ch) {
         case VSWITCH_BLK:
             // virq_inject(GUEST_VCPU_ID, UIO_BLK_IRQ);

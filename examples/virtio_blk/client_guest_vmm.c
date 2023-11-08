@@ -21,10 +21,15 @@
 #include "virtio/virtio_net_mmio.h"
 #include "virtio/virtio_blk_mmio.h"
 
-
+#if defined(BOARD_qemu_arm_virt)
+#define GUEST_RAM_SIZE 0x10000000
+#define GUEST_DTB_VADDR 0x4f000000
+#define GUEST_INIT_RAM_DISK_VADDR 0x4d700000
+#elif defined(BOARD_odroidc4)
 #define GUEST_RAM_SIZE 0x10000000
 #define GUEST_DTB_VADDR 0x2f000000
 #define GUEST_INIT_RAM_DISK_VADDR 0x2d700000
+#endif
 
 
 /* Data for the guest's kernel image. */
@@ -39,7 +44,7 @@ extern char _guest_initrd_image_end[];
 /* microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
-#define VSWITCH_BLK 1
+#define VSWITCH_BLK 0
 
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
@@ -103,6 +108,9 @@ void init(void) {
     // Register virtio_blk device
     virtio_blk_mmio_init();
     virq_register(GUEST_VCPU_ID, VIRTIO_BLK_IRQ, &virtio_blk_mmio_ack, NULL);
+
+    // Serial passthrough
+    // register_passthrough_irq(33, 1);
 
     // printf("cmdq_avail: 0x%lx\n", cmdq_avail);
     // printf("cmdq_used: 0x%lx\n", cmdq_used);

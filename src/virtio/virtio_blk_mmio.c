@@ -148,8 +148,8 @@ static int virtio_blk_mmio_queue_notify()
                 printf("\"%s\"|VIRTIO BLK|INFO: Sector (read/write offset) is %d (x512)\n", microkit_name, cmd->sector);
                 curr_desc_head = vring->desc[curr_desc_head].next;
                 printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
-                uintptr_t data = vring->desc[curr_desc_head].addr;
-                printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
+                // uintptr_t data = vring->desc[curr_desc_head].addr;
+                // printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
                 break;
             }
             case VIRTIO_BLK_T_OUT: {
@@ -157,8 +157,8 @@ static int virtio_blk_mmio_queue_notify()
                 printf("\"%s\"|VIRTIO BLK|INFO: Sector (read/write offset) is %d (x512)\n", microkit_name, cmd->sector);
                 curr_desc_head = vring->desc[curr_desc_head].next;
                 printf("\"%s\"|VIRTIO BLK|INFO: Descriptor index is %d, Descriptor flags are: 0x%x, length is 0x%x\n", microkit_name, curr_desc_head, (uint16_t)vring->desc[curr_desc_head].flags, vring->desc[curr_desc_head].len);
-                uintptr_t data = vring->desc[curr_desc_head].addr;
-                printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
+                // uintptr_t data = vring->desc[curr_desc_head].addr;
+                // printf("\"%s\"|VIRTIO BLK|INFO: Data is %s\n", microkit_name, (char *)data);
                 break;
             }
             case VIRTIO_BLK_T_FLUSH: {

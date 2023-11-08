@@ -58,23 +58,25 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(BOARD)/$(CONFIG)
 VMM := ../../
 VMM_TOOLS := $(VMM)/tools
 VMM_SRC_DIR := $(VMM)/src
-SYSTEM_DESCRIPTION := board/$(BOARD)/uio.system
+SYSTEM_DESCRIPTION := board/$(BOARD)/virtio.system
 
-IMAGE_DIR := board/$(BOARD)
-LINUX := $(IMAGE_DIR)/linux
-INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
+DRIVER_DIR := board/$(BOARD)/driver
+CLIENT_DIR := board/$(BOARD)/client
+DRIVER_DTS_DIR := $(DRIVER_DIR)/dts
+CLIENT_DTS_DIR := $(CLIENT_DIR)/dts
 
-BASE_DTS := $(IMAGE_DIR)/linux.dts
-# @tim: figure out best way to specify DTS overlays
-UIO_DTS := $(IMAGE_DIR)/uio.dts
-ETH_DTS := $(IMAGE_DIR)/eth.dts
-DRIVER_DTS_OVERLAYS := $(UIO_DTS) $(ETH_DTS)
+DRIVER_LINUX := $(DRIVER_DIR)/linux
+DRIVER_INITRD := $(DRIVER_DIR)/rootfs.cpio.gz
+DRIVER_BASE_DTS := $(DRIVER_DTS_DIR)/linux.dts
+DRIVER_DTS_OVERLAYS := $(DRIVER_DTS_DIR)/init.dts $(DRIVER_DTS_DIR)/uio.dts
 
-DISABLE_HW_DTS := $(IMAGE_DIR)/disable_hw.dts
-CLIENT_DTS_OVERLAYS := $(DISABLE_HW_DTS) 
+CLIENT_LINUX := $(CLIENT_DIR)/linux
+CLIENT_INITRD := $(CLIENT_DIR)/rootfs.cpio.gz
+CLIENT_BASE_DTS := $(CLIENT_DTS_DIR)/linux.dts
+CLIENT_DTS_OVERLAYS := $(CLIENT_DTS_DIR)/init.dts $(CLIENT_DTS_DIR)/virtio_blk.dts 
 
-CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
+CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 
 ELFS := client_guest_vmm.elf driver_guest_vmm.elf
 
@@ -112,26 +114,36 @@ all: directories $(IMAGE_FILE)
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-$(CLIENT_DTB): $(BASE_DTS) $(CLIENT_DTS_OVERLAYS)
+qemu: all
+	# @ivanv: check that the amount of RAM given to QEMU is at least the number of RAM that QEMU is setup with for seL4.
+	if ! command -v $(QEMU) &> /dev/null; then echo "Could not find dependency: qemu-system-aarch64"; exit 1; fi
+	$(QEMU) -machine virt,virtualization=on \
+			-cpu cortex-a53 \
+			-serial mon:stdio \
+			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
+			-m size=2G \
+			-nographic
+
+$(CLIENT_DTB): $(CLIENT_BASE_DTS) $(CLIENT_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/client_guest.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_guest.dts > $@
 
-$(BUILD_DIR)/client_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(CLIENT_DTB) $(INITRD)
+$(BUILD_DIR)/client_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(CLIENT_LINUX) $(CLIENT_DTB) $(CLIENT_INITRD)
 	$(CC) -c -g3 -x assembler-with-cpp \
-					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
+					-DGUEST_KERNEL_IMAGE_PATH=\"$(CLIENT_LINUX)\" \
 					-DGUEST_DTB_IMAGE_PATH=\"$(CLIENT_DTB)\" \
-					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
+					-DGUEST_INITRD_IMAGE_PATH=\"$(CLIENT_INITRD)\" \
 					$< -o $@
 
-$(DRIVER_DTB): $(BASE_DTS) $(DRIVER_DTS_OVERLAYS)
+$(DRIVER_DTB): $(DRIVER_BASE_DTS) $(DRIVER_DTS_OVERLAYS)
 	../../scripts/dtscat $^ > $(BUILD_DIR)/driver_guest.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/driver_guest.dts > $@
 
-$(BUILD_DIR)/driver_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(DRIVER_DTB) $(INITRD)
+$(BUILD_DIR)/driver_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(DRIVER_LINUX) $(DRIVER_DTB) $(DRIVER_INITRD)
 	$(CC) -c -g3 -x assembler-with-cpp \
-					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
+					-DGUEST_KERNEL_IMAGE_PATH=\"$(DRIVER_LINUX)\" \
 					-DGUEST_DTB_IMAGE_PATH=\"$(DRIVER_DTB)\" \
-					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
+					-DGUEST_INITRD_IMAGE_PATH=\"$(DRIVER_INITRD)\" \
 					$< -o $@
 
 $(BUILD_DIR)/%.o: %.c Makefile
@@ -161,5 +173,5 @@ $(BUILD_DIR)/client_guest_vmm.elf: $(addprefix $(BUILD_DIR)/, $(CLIENT_VMM_OBJS)
 $(BUILD_DIR)/driver_guest_vmm.elf: $(addprefix $(BUILD_DIR)/, $(DRIVER_VMM_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION) $(IMAGE_DIR)
-	$(MICROKIT_TOOL) $(SYSTEM_DESCRIPTION) --search-path $(BUILD_DIR) $(IMAGE_DIR) --board $(BOARD) --config $(CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(ELFS)) $(SYSTEM_DESCRIPTION) $(DRIVER_DIR) $(CLIENT_DIR)
+	$(MICROKIT_TOOL) $(SYSTEM_DESCRIPTION) --search-path $(BUILD_DIR) $(DRIVER_DIR) $(CLIENT_DIR) --board $(BOARD) --config $(CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
