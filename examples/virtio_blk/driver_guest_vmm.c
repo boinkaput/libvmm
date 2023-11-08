@@ -123,7 +123,7 @@ void init(void) {
     // register_passthrough_irq(PASSTHROUGH_BLK_IRQ, PASSTHROUGH_BLK_ID);
 
     /* Register UIO irq */
-    virq_register(GUEST_VCPU_ID, UIO_BLK_IRQ, &dummy_ack, NULL);
+    // virq_register(GUEST_VCPU_ID, UIO_BLK_IRQ, &dummy_ack, NULL);
 
     // Silence unused sDDF variable warnings, lets just print them out for now
     // printf("cmdq_avail: 0x%lx\n", cmdq_avail);
@@ -138,9 +138,13 @@ void init(void) {
 }
 
 void notified(microkit_channel ch) {
+    if (ch == 1) {
+        printf("SERIAL IRQ\n");
+    }
+
     switch (ch) {
         case VSWITCH_BLK:
-            virq_inject(GUEST_VCPU_ID, UIO_BLK_IRQ);
+            // virq_inject(GUEST_VCPU_ID, UIO_BLK_IRQ);
             break;
         default:
             if (passthrough_irq_map[ch]) {

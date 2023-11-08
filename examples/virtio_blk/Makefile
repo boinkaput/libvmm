@@ -62,16 +62,19 @@ SYSTEM_DESCRIPTION := board/$(BOARD)/uio.system
 
 IMAGE_DIR := board/$(BOARD)
 LINUX := $(IMAGE_DIR)/linux
+INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
+
 BASE_DTS := $(IMAGE_DIR)/linux.dts
 # @tim: figure out best way to specify DTS overlays
 UIO_DTS := $(IMAGE_DIR)/uio.dts
 ETH_DTS := $(IMAGE_DIR)/eth.dts
-DISBALE_HW_DTS := $(IMAGE_DIR)/disable_hw.dts
-CLIENT_DTS_OVERLAYS := $(DISBALE_HW_DTS) 
 DRIVER_DTS_OVERLAYS := $(UIO_DTS) $(ETH_DTS)
+
+DISABLE_HW_DTS := $(IMAGE_DIR)/disable_hw.dts
+CLIENT_DTS_OVERLAYS := $(DISABLE_HW_DTS) 
+
 CLIENT_DTB := $(BUILD_DIR)/client_linux.dtb
 DRIVER_DTB := $(BUILD_DIR)/driver_linux.dtb
-INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
 ELFS := client_guest_vmm.elf driver_guest_vmm.elf
 
