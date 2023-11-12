@@ -62,7 +62,12 @@ ring_handle_t serial_tx_ring;
 #define VIRTIO_CONSOLE_BASE (0x130000)
 #define VIRTIO_CONSOLE_SIZE (0x1000)
 
+#define VIRTIO_VSOCK_IRQ (75)
+#define VIRTIO_VSOCK_BASE (0x131000)
+#define VIRTIO_VSOCK_SIZE (0x1000)
+
 static struct virtio_device virtio_console;
+static struct virtio_device virtio_vsock;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -117,6 +122,11 @@ void init(void) {
     success = virtio_mmio_device_init(&virtio_console, CONSOLE, VIRTIO_CONSOLE_BASE, VIRTIO_CONSOLE_SIZE, VIRTIO_CONSOLE_IRQ,
                                       &serial_rx_ring, &serial_tx_ring, SERIAL_MUX_TX_CH);
     assert(success);
+    /* Initialise virtIO socket device */
+    // @ivanv: sort out TX channel number
+    success = virtio_mmio_device_init(&virtio_vsock, VSOCK, VIRTIO_VSOCK_BASE, VIRTIO_VSOCK_SIZE, VIRTIO_VSOCK_IRQ, NULL, NULL, 10);
+    assert(success);
+    /* */
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }

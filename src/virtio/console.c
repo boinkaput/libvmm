@@ -246,10 +246,11 @@ int virtio_console_handle_rx(struct virtio_device *dev) {
     assert(!ret);
     // @ivanv: error handle for release mode
 
+    // @ivanv: return 0 on success
     return -1;
 }
 
-virtio_device_funs_t functions = {
+static virtio_device_funs_t functions = {
     .device_reset = virtio_console_reset,
     .get_device_features = virtio_console_get_device_features,
     .set_driver_features = virtio_console_set_driver_features,

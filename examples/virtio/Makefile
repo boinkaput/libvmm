@@ -94,6 +94,7 @@ VMM_OBJS := vmm.o \
 			vcpu.o \
 			mmio.o \
 			console.o \
+			vsock.o \
 			virtio.o \
 			shared_ringbuffer.o
 

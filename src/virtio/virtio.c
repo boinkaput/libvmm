@@ -6,10 +6,12 @@
 #include "fault.h"
 #include "util/util.h"
 #include "virtio/console.h"
+#include "virtio/vsock.h"
 #include "virtio/virtio.h"
 #include "virq.h"
 
 static struct virtio_queue_handler virtio_console_queues[VIRTIO_CONSOLE_NUM_VIRTQ];
+static struct virtio_queue_handler virtio_vsock_queues[VIRTIO_VSOCK_NUM_VIRTQ];
 
 void virtio_virq_default_ack(size_t vcpu_id, int irq, void *cookie) {
     // nothing needs to be done
@@ -35,7 +37,16 @@ bool virtio_mmio_device_init(virtio_device_t *dev,
                                                       dev);
         if (!success) {
             LOG_VMM_ERR("Could not register virtual memory fault handler for "
-                        "virtIO region [0x%lx..0x%lx)\n", region_base, region_base + region_size);
+                        "virtIO console region [0x%lx..0x%lx)\n", region_base, region_base + region_size);
+            return false;
+        }
+        break;
+    case VSOCK:
+        virtio_vsock_init(dev, virtio_vsock_queues, VIRTIO_VSOCK_NUM_VIRTQ, virq, sddf_mux_tx_ch);
+        success = fault_register_vm_exception_handler(region_base, region_size, &virtio_mmio_fault_handle, dev);
+        if (!success) {
+            LOG_VMM_ERR("Could not register virtual memory fault handler for "
+                        "virtIO vsock region [0x%lx..0x%lx)\n", region_base, region_base + region_size);
             return false;
         }
         break;
