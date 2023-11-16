@@ -141,7 +141,6 @@ static void update_ring_slot(
     /* Ensure all writes to the descriptor complete, before we set the flags
      * that makes hardware aware of this slot.
      */
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 }
 
@@ -163,7 +162,6 @@ alloc_rx_buf(size_t buf_size, void **cookie)
 static void fill_rx_bufs()
 {
     ring_ctx_t *ring = &rx;
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 
     while (ring->remain > 0) {
@@ -188,7 +186,6 @@ static void fill_rx_bufs()
         /* There is a race condition if add/remove is not synchronized. */
         ring->remain--;
     }
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 
     if (ring->tail != ring->head) {
@@ -213,7 +210,6 @@ handle_rx()
         volatile struct descriptor *d = &(ring->descr[head]);
         unsigned int status = d->status;
         /* Ensure no memory references get ordered before we checked the descriptor was written back */
-        // THREAD_MEMORY_FENCE();
         __sync_synchronize();
 
         /* If the slot is still marked as ready we are done. */
@@ -322,7 +318,6 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
         }
     }
 
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 
     unsigned int tail = ring->tail;
@@ -352,7 +347,6 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
     /* There is a race condition here if add/remove is not synchronized. */
     ring->remain -= num;
 
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 
     if (!(eth_mac->conf & TXENABLE)) {
@@ -361,7 +355,6 @@ raw_tx(unsigned int num, uintptr_t *phys, unsigned int *len, void *cookie)
 
     /* Start the transmission */
 	eth_dma->txpolldemand = POLL_DATA;
-    // THREAD_MEMORY_FENCE();
     __sync_synchronize();
 }
 
@@ -425,9 +418,12 @@ handle_tx()
 
     // We need to put in an empty condition here. 
     while ((tx.remain > 1) && !driver_dequeue(tx_ring.used_ring, &buffer, &len, &cookie)) {
-        dump_payload(len, (uint8_t *)buffer);
+        int err = seL4_ARM_VSpace_Invalidate_Data(3, buffer, buffer + 1500);
+        if (err) {
+            printf("ARM Vspace invalidate failed\n");
+        }
+
         uintptr_t phys = getPhysAddr(buffer);
-        printf("physical address: %p\n", phys);
         raw_tx(1, &phys, &len, cookie);
     }
 }
@@ -690,7 +686,6 @@ void notified(microkit_channel ch)
             signal = (BASE_IRQ_CAP + IRQ_CH);
             return;
         case IRQ_2:
-            printf("phy!\n");
             handle_eth(eth_dma);
             have_signal = true;
             signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
