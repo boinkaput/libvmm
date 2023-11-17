@@ -20,8 +20,7 @@
     <memory_region name="avail-2" size="0x200_000" page_size="0x200_000"/>
     <memory_region name="used-2" size="0x200_000" page_size="0x200_000"/>
 
-    <memory_region name="shared_dma-1" size="0x200_000" page_size="0x200_000" />
-    <memory_region name="shared_dma-2" size="0x200_000" page_size="0x200_000" />
+    <memory_region name="shared_dma" size="0x200_000" page_size="0x200_000" />
 
     <memory_region name="bus1" size="0x200000" phys_addr="0xff600000" />
     <memory_region name="bus3" size="0x100000" phys_addr="0xffd00000" />
@@ -35,7 +34,7 @@
     <memory_region name="mmc" size="0x1000" phys_addr="0xffe07000" />
     <memory_region name="gpu" size="0x40000" phys_addr="0xffe40000" />
     <memory_region name="vpu" size="0x100000" phys_addr="0xff900000" />
-    <memory_region name="eth" size="0x10000" phys_addr="0xff3f0000" />
+    <memory_region name="eth0" size="0x10000" phys_addr="0xff3f0000" />
 
     <protection_domain name="VMM-1">
         <program_image path="vmm1.elf" />
@@ -55,23 +54,28 @@
             <map mr="mmc" vaddr="0xffe07000" perms="rw" cached="false" />
             <map mr="gpu" vaddr="0xffe40000" perms="rw" cached="false" />
             <map mr="vpu" vaddr="0xff900000" perms="rw" cached="false" />
-            <map mr="eth" vaddr="0xff3f0000" perms="rw" cached="false" />
+            <map mr="eth0" vaddr="0xff3f0000" perms="rw" cached="false" />
         </virtual_machine>
 
         <!-- shared memory for ring buffer mechanism -->
         <!-- the vaddrs are just random numbers that I picked, if you're using your own dts file and
              get an `seL4_FailedLookup` error, considering change these addresses to something else
              that make more senses. -->
-        <map mr="avail-1" vaddr="0x30000000" perms="rw" cached="true" setvar_vaddr="net_rx_avail" />
-        <map mr="used-1" vaddr="0x30200000" perms="rw" cached="true" setvar_vaddr="net_rx_used" />
-        <map mr="avail-2" vaddr="0x30400000" perms="rw" cached="true" setvar_vaddr="net_tx_avail" />
-        <map mr="used-2" vaddr="0x30600000" perms="rw" cached="true" setvar_vaddr="net_tx_used" />
+        <map mr="avail-1" vaddr="0x30_000_000" perms="rw" cached="true" setvar_vaddr="net_rx_avail" />
+        <map mr="used-1" vaddr="0x30_200_000" perms="rw" cached="true" setvar_vaddr="net_rx_used" />
+        <map mr="avail-2" vaddr="0x30_400_000" perms="rw" cached="true" setvar_vaddr="net_tx_avail" />
+        <map mr="used-2" vaddr="0x30_600_000" perms="rw" cached="true" setvar_vaddr="net_tx_used" />
 
-        <map mr="shared_dma-1" vaddr="0x30800000" perms="rw" cached="true" setvar_vaddr="net_rx_shared_dma_vaddr" />
-        <map mr="shared_dma-2" vaddr="0x30a00000" perms="rw" cached="true" setvar_vaddr="net_tx_shared_dma_vaddr" />
+        <map mr="shared_dma" vaddr="0x30_800_000" perms="rw" cached="true" setvar_vaddr="net_shared_dma_vaddr" />
+
+        <!-- PHY IRQ -->
+        <irq irq="96" id="0" />
+        <!-- ethernet IRQ -->
+        <irq irq="40" id="1" />
 
         <!-- Serial IRQ -->
-        <irq irq="225" id="1" trigger="edge" />
+        <irq irq="225" id="3" trigger="edge" />
+        <irq irq="5" id="5" />
     </protection_domain>
 
     <protection_domain name="VMM-2">
@@ -85,18 +89,24 @@
         </virtual_machine>
 
         <!-- shared memory for ring buffer mechanism -->
-        <map mr="avail-2" vaddr="0x300000000" perms="rw" cached="true" setvar_vaddr="net_rx_avail" />
-        <map mr="used-2" vaddr="0x30200000" perms="rw" cached="true" setvar_vaddr="net_rx_used" />
-        <map mr="avail-1" vaddr="0x30400000" perms="rw" cached="true" setvar_vaddr="net_tx_avail" />
-        <map mr="used-1" vaddr="0x30600000" perms="rw" cached="true" setvar_vaddr="net_tx_used" />
+        <map mr="avail-1" vaddr="0x30_000_000" perms="rw" cached="true" setvar_vaddr="net_rx_avail" />
+        <map mr="used-1" vaddr="0x30_200_000" perms="rw" cached="true" setvar_vaddr="net_rx_used" />
+        <map mr="avail-2" vaddr="0x30_400_000" perms="rw" cached="true" setvar_vaddr="net_tx_avail" />
+        <map mr="used-2" vaddr="0x30_600_000" perms="rw" cached="true" setvar_vaddr="net_tx_used" />
 
-        <map mr="shared_dma-2" vaddr="0x30a00000" perms="rw" cached="true" setvar_vaddr="net_rx_shared_dma_vaddr" />
-        <map mr="shared_dma-1" vaddr="0x30800000" perms="rw" cached="true" setvar_vaddr="net_tx_shared_dma_vaddr" />
-        
+        <map mr="shared_dma" vaddr="0x30_800_000" perms="rw" cached="true" setvar_vaddr="net_shared_dma_vaddr" />
+
     </protection_domain>
 
+    <!-- TX/RX -->
     <channel>
         <end pd="VMM-1" id="2" />
         <end pd="VMM-2" id="2" />
+    </channel>
+
+    <!-- get MAC -->
+    <channel>
+        <end pd="VMM-1" id="4" />
+        <end pd="VMM-2" id="4" />
     </channel>
 </system>

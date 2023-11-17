@@ -67,8 +67,7 @@ uintptr_t net_rx_avail;
 uintptr_t net_rx_used;
 uintptr_t net_tx_avail;
 uintptr_t net_tx_used;
-uintptr_t net_rx_shared_dma_vaddr;
-uintptr_t net_tx_shared_dma_vaddr;
+uintptr_t net_shared_dma_vaddr;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -100,9 +99,12 @@ void init(void) {
 
 
 #if defined(BOARD_qemu_arm_virt)
-    register_passthrough_irq(33, 1);
+    register_passthrough_irq(33, 3);
 #elif defined(BOARD_odroidc4)
-    register_passthrough_irq(225, 1);
+    register_passthrough_irq(225, 3);
+    register_passthrough_irq(5, 5);
+    register_passthrough_irq(96, 0);
+    register_passthrough_irq(40, 1);
 #endif
 
     // Register virtio_mmio faults

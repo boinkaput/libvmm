@@ -61,7 +61,8 @@ VMM_SRC_DIR := $(VMM)/src
 SYSTEM_DESCRIPTION := board/$(BOARD)/virtio_demo.system
 
 IMAGE_DIR := board/$(BOARD)
-LINUX := $(IMAGE_DIR)/linux
+# LINUX := $(IMAGE_DIR)/linux
+LINUX := $(IMAGE_DIR)/linux_uio_hdmi_eth
 DTS := $(IMAGE_DIR)/linux.dts
 VMM1_DTS_OVERLAY := $(IMAGE_DIR)/vmm1_overlay.dts
 VMM2_DTS_OVERLAY := $(IMAGE_DIR)/vmm2_overlay.dts

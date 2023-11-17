@@ -72,13 +72,6 @@ static char temp_buf[TMP_BUF_SIZE];
 ring_handle_t net_client_rx_ring;
 ring_handle_t net_client_tx_ring;
 
-// @jade: I don't know why we need these but the driver seems to care
-
-typedef enum {
-    ORIGIN_RX_QUEUE,
-    ORIGIN_TX_QUEUE,
-} ethernet_buffer_origin_t;
-
 typedef struct ethernet_buffer {
     /* The acutal underlying memory of the buffer */
     uintptr_t buffer;

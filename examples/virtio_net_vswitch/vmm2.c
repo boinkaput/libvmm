@@ -67,8 +67,7 @@ uintptr_t net_rx_avail;
 uintptr_t net_rx_used;
 uintptr_t net_tx_avail;
 uintptr_t net_tx_used;
-uintptr_t net_rx_shared_dma_vaddr;
-uintptr_t net_tx_shared_dma_vaddr;
+uintptr_t net_shared_dma_vaddr;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
