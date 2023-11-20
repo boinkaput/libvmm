@@ -120,9 +120,9 @@ void init(void) {
 
 void notified(microkit_channel ch) {
     switch (ch) {
-        case VSWITCH_CONN_CH_1:
-            vswitch_rx(ch);
-            break;
+        // case VSWITCH_CONN_CH_1:
+        //     vswitch_rx(ch);
+        //     break;
         default:
             if (passthrough_irq_map[ch]) {
                 bool success = virq_inject(GUEST_VCPU_ID, passthrough_irq_map[ch]);

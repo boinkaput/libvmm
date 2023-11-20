@@ -126,12 +126,6 @@
 		phandle = <0x04>;
 		status = "disabled";
 	};
-
-	// virtio_net@0130000 {
-	// 	compatible = "virtio,mmio";
-	// 	reg = <0x00 0x130000 0x00 0x200>;
-	// 	interrupts = <0x00 42 0x04>;
-	// };
 	
 	soc {
 		compatible = "simple-bus";
