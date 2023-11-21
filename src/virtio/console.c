@@ -87,14 +87,14 @@ static int virtio_console_set_driver_features(struct virtio_device *dev, uint32_
     return success;
 }
 
-static int virtio_console_get_device_config(struct virtio_device *dev, uint32_t offset, uint32_t *config) {
+static bool virtio_console_get_device_config(struct virtio_device *dev, uint32_t offset, uint32_t *config) {
     LOG_CONSOLE("operation: get device config\n");
-    return -1;
+    return false;
 }
 
-static int virtio_console_set_device_config(struct virtio_device *dev, uint32_t offset, uint32_t config) {
+static bool virtio_console_set_device_config(struct virtio_device *dev, uint32_t offset, uint32_t config) {
     LOG_CONSOLE("operation: set device config\n");
-    return -1;
+    return false;
 }
 
 /* The guest has notified us that it has placed something in the transmit queue. */

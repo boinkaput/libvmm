@@ -8,12 +8,12 @@
 #define DEBUG_VSOCK
 
 #if defined(DEBUG_VSOCK)
-#define LOG_VSOCK(...) do{ printf("VIRTIO(VSOCK): "); printf(__VA_ARGS__); }while(0)
+#define LOG_VSOCK(...) do{ printf("%s|VIRTIO(VSOCK): ", microkit_name); printf(__VA_ARGS__); }while(0)
 #else
 #define LOG_VSOCK(...) do{}while(0)
 #endif
 
-#define LOG_VSOCK_ERR(...) do{ printf("VIRTIO(VSOCK)|ERROR: "); printf(__VA_ARGS__); }while(0)
+#define LOG_VSOCK_ERR(...) do{ printf("%s|VIRTIO(VSOCK)|ERROR: ", microkit_name); printf(__VA_ARGS__); }while(0)
 
 // @ivanv: put in util or remove
 #define BIT_LOW(n)  (1ul<<(n))
@@ -35,7 +35,7 @@ static int virtio_vsock_get_device_features(struct virtio_device *dev, uint32_t 
 
     switch (dev->data.DeviceFeaturesSel) {
         case 0:
-            *features = 0;
+            *features = BIT_LOW(VIRTIO_VSOCK_F_STREAM);
             break;
         case 1:
             *features = BIT_HIGH(VIRTIO_F_VERSION_1);
@@ -80,14 +80,31 @@ static int virtio_vsock_set_driver_features(struct virtio_device *dev, uint32_t 
     return success;
 }
 
-static int virtio_vsock_get_device_config(struct virtio_device *dev, uint32_t offset, uint32_t *config) {
+static bool virtio_vsock_get_device_config(struct virtio_device *dev, uint32_t offset, uint32_t *config) {
     LOG_VSOCK("operation: get device config\n");
-    return -1;
+
+    switch (offset) {
+        case 0x0:
+            LOG_VSOCK("get config 0x0\n");
+            *config = 2;
+            break;
+        case 0x4:
+            /* The upper 32-bits of the CID are reserved and zeroed. */
+            LOG_VSOCK("get config 0x4\n");
+            *config = 0;
+            break;
+        default:
+            LOG_VSOCK("get config at unknown register offset 0x%x\n", offset);
+            return false;
+            break;
+    }
+
+    return true;
 }
 
-static int virtio_vsock_set_device_config(struct virtio_device *dev, uint32_t offset, uint32_t config) {
+static bool virtio_vsock_set_device_config(struct virtio_device *dev, uint32_t offset, uint32_t config) {
     LOG_VSOCK("operation: set device config\n");
-    return -1;
+    return false;
 }
 
 static int virtio_vsock_handle_tx(struct virtio_device *dev) {

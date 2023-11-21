@@ -44,6 +44,7 @@
 #define VIRTIO_VSOCK_NUM_VIRTQ 3
 
 /* The feature bitmap for virtio vsock */
+#define VIRTIO_VSOCK_F_STREAM          0
 #define VIRTIO_VSOCK_F_SEQPACKET       1       /* SOCK_SEQPACKET supported */
 
 struct virtio_vsock_config {

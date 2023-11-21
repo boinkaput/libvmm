@@ -69,7 +69,7 @@ typedef struct virtio_queue_handler {
 struct virtio_device;
 
 // functions provided by the emul (device) layer for the emul (mmio) layer
-typedef struct virtio_emul_funs {
+typedef struct virtio_device_funs {
     void (*device_reset)(struct virtio_device *dev);
 
     // REG_VIRTIO_MMIO_DEVICE_FEATURES related operations
@@ -77,8 +77,8 @@ typedef struct virtio_emul_funs {
     int (*set_driver_features)(struct virtio_device *dev, uint32_t features);
 
     // REG_VIRTIO_MMIO_CONFIG related operations
-    int (*get_device_config)(struct virtio_device *dev, uint32_t offset, uint32_t *ret_val);
-    int (*set_device_config)(struct virtio_device *dev, uint32_t offset, uint32_t val);
+    bool (*get_device_config)(struct virtio_device *dev, uint32_t offset, uint32_t *ret_val);
+    bool (*set_device_config)(struct virtio_device *dev, uint32_t offset, uint32_t val);
     int (*queue_notify)(struct virtio_device *dev);
 } virtio_device_funs_t;
 
