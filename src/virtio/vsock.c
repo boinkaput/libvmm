@@ -83,6 +83,7 @@ static int virtio_vsock_set_driver_features(struct virtio_device *dev, uint32_t 
 static bool virtio_vsock_get_device_config(struct virtio_device *dev, uint32_t offset, uint32_t *config) {
     LOG_VSOCK("operation: get device config\n");
 
+    // @ivanv: should we be using a range 0x0...0x4? The spec doesn't seem to clarify this.
     switch (offset) {
         case 0x0:
             LOG_VSOCK("get config 0x0\n");

@@ -66,6 +66,8 @@ DTS := $(IMAGE_DIR)/linux.dts
 DTB := $(BUILD_DIR)/linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
+VSOCK_TEST := vsock_test.c
+
 SDDF := sddf
 SDDF_SERIAL_RINGBUFFER := $(SDDF)/serial/libserialsharedringbuffer
 SDDF_SERIAL_COMPONENTS := $(SDDF)/serial/components
@@ -181,6 +183,9 @@ $(BUILD_DIR)/%.o: $(SDDF_SERIAL_RINGBUFFER)/%.c Makefile
 
 $(BUILD_DIR)/%.o: $(SDDF_SERIAL_DRIVER)/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
+
+$(BUILD_DIR)/%.o: $(VSOCK_TEST)
+	zig cc $(VSOCK_TEST) -target aarch64-linux-musl
 
 $(BUILD_DIR)/vmm.elf: $(addprefix $(BUILD_DIR)/, $(VMM_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
