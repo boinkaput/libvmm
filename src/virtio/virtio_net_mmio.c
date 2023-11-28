@@ -30,6 +30,31 @@
  * currently we haven't figured out what to do.
  */
 
+/* FIXME(@jade): virtio net backend seems to crash if the other end of the sDDF ring is not responding,
+ * this need further investigation but I have a deadline :(
+ * A sample error msg:
+ * 
+ * ```
+ * MON|ERROR: received message 0x00000006  badge: 0x0000000000000002  tcb cap: 0x800000000000788a
+ * MON|ERROR: faulting PD: VMM-client
+ * Registers: 
+ * pc : 0x00000000002084a0
+ * spsr : 0x0000000020000040
+ * x0 : 0x0000000000000005
+ * x1 : 0x0000000000000001
+ * x2 : 0x0000000000100000
+ * x3 : 0x0000000000000059
+ * x4 : 0x00000000038547d0
+ * x5 : 0x000000000000005a
+ * x6 : 0x000000009a0b0f7c
+ * x7 : 0x0000000000000000
+ * MON|ERROR: VMFault: ip=0x00000000002084a0  fault_addr=0x0000000000100000  fsr=0x0000000092000046  (data fault)
+ * MON|ERROR:    ec: 0x00000024  Data Abort from a lower Exception level   il: 1   iss: 0x00000046
+ * MON|ERROR:    dfsc = translation fault, level 2 (0x00000006) -- write not read
+ * ```
+ * 
+ */
+
 #include <stddef.h>
 #include "virtio_mmio.h"
 #include "virtio_net_mmio.h"
@@ -71,6 +96,12 @@ static char temp_buf[TMP_BUF_SIZE];
 
 ring_handle_t net_client_rx_ring;
 ring_handle_t net_client_tx_ring;
+
+// @jade: I don't know why we need these but the driver seems to care
+typedef enum {
+    ORIGIN_RX_QUEUE,
+    ORIGIN_TX_QUEUE,
+} ethernet_buffer_origin_t;
 
 typedef struct ethernet_buffer {
     /* The acutal underlying memory of the buffer */

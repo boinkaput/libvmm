@@ -45,6 +45,17 @@ uintptr_t guest_ram_vaddr;
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
 
+// @jade: find a nice place
+#define NET_DRIVER_TX_CH        2
+#define NET_DRIVER_GET_MAC_CH   4
+
+#define NET_DRIVER_UIO_IRQ      42
+
+static void uio_ack(size_t vcpu_id, int irq, void *cookie) {
+    /* @jade: should do something here */
+    printf("uio_ack!!!!!!!!!!\n");
+}
+
 static void passthrough_device_ack(size_t vcpu_id, int irq, void *cookie) {
     microkit_channel irq_ch = (microkit_channel)(int64_t)cookie;
     microkit_irq_ack(irq_ch);
@@ -61,13 +72,6 @@ static void register_passthrough_irq(int irq, microkit_channel irq_ch) {
         return;
     }
 }
-
-/* sDDF memory regions for virtio net */
-uintptr_t net_rx_avail;
-uintptr_t net_rx_used;
-uintptr_t net_tx_avail;
-uintptr_t net_tx_used;
-uintptr_t net_shared_dma_vaddr;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -102,30 +106,39 @@ void init(void) {
     register_passthrough_irq(33, 3);
 #elif defined(BOARD_odroidc4)
     register_passthrough_irq(225, 3);
+    register_passthrough_irq(223, 6);
     register_passthrough_irq(5, 5);
     register_passthrough_irq(96, 0);
     register_passthrough_irq(40, 1);
 #endif
 
-    // Register virtio_mmio faults
-    fault_register_vm_exception_handler(VIRTIO_ADDRESS_START, VIRTIO_ADDRESS_END - VIRTIO_ADDRESS_START, &virtio_mmio_handle_fault);
-
     // Register virtio_net device
-    virtio_net_mmio_init(net_tx_avail, net_tx_used, net_tx_shared_dma_vaddr, net_rx_avail, net_rx_used, net_rx_shared_dma_vaddr);
-    virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_net_mmio_ack, NULL);
+    virq_register(GUEST_VCPU_ID, NET_DRIVER_UIO_IRQ, &uio_ack, NULL);
 
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
 
 void notified(microkit_channel ch) {
+    bool success;
     switch (ch) {
-        // case VSWITCH_CONN_CH_1:
-        //     vswitch_rx(ch);
-        //     break;
+        case NET_DRIVER_TX_CH:
+            success = virq_inject(GUEST_VCPU_ID, NET_DRIVER_UIO_IRQ);
+            if (!success) {
+                LOG_VMM_ERR("IRQ %d dropped on vCPU %d\n", NET_DRIVER_UIO_IRQ, GUEST_VCPU_ID);
+            }
+            break;
+
+        case NET_DRIVER_GET_MAC_CH:
+            success = virq_inject(GUEST_VCPU_ID, NET_DRIVER_UIO_IRQ);
+            if (!success) {
+                LOG_VMM_ERR("IRQ %d dropped on vCPU %d\n", NET_DRIVER_UIO_IRQ, GUEST_VCPU_ID);
+            }
+            break;
+
         default:
             if (passthrough_irq_map[ch]) {
-                bool success = virq_inject(GUEST_VCPU_ID, passthrough_irq_map[ch]);
+                success = virq_inject(GUEST_VCPU_ID, passthrough_irq_map[ch]);
                 if (!success) {
                     LOG_VMM_ERR("IRQ %d dropped on vCPU %d\n", passthrough_irq_map[ch], GUEST_VCPU_ID);
                 }

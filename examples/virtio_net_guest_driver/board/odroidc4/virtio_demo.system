@@ -15,10 +15,10 @@
     <memory_region name="gic_vcpu" size="0x1_000" phys_addr="0xffc06000" />
 
     <!-- shared memory for ring buffer mechanism -->
-    <memory_region name="avail-1" size="0x200_000" page_size="0x200_000"/>
-    <memory_region name="used-1" size="0x200_000" page_size="0x200_000"/>
-    <memory_region name="avail-2" size="0x200_000" page_size="0x200_000"/>
-    <memory_region name="used-2" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="uio-avail-1" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="uio-used-1" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="uio-avail-2" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="uio-used-2" size="0x200_000" page_size="0x200_000"/>
 
     <memory_region name="shared_dma" size="0x200_000" page_size="0x200_000" />
 
@@ -56,24 +56,27 @@
             <map mr="gpu" vaddr="0xffe40000" perms="rw" cached="false" />
             <map mr="vpu" vaddr="0xff900000" perms="rw" cached="false" />
             <map mr="eth0" vaddr="0xff3f0000" perms="rw" cached="false" />
+        
+            <!-- shared memory for ring buffer mechanism -->
+            <!-- the vaddrs are just random numbers that I picked, if you're using your own dts file and
+                get an `seL4_FailedLookup` error, considering change these addresses to something else
+                that make more senses. -->
+            <map mr="uio-avail-1" vaddr="0x30_000_000" perms="rw" cached="true" />
+            <map mr="uio-used-1" vaddr="0x30_200_000" perms="rw" cached="true" />
+            <map mr="uio-avail-2" vaddr="0x30_400_000" perms="rw" cached="true" />
+            <map mr="uio-used-2" vaddr="0x30_600_000" perms="rw" cached="true" />
+
+            <!-- @jade: does the physical address matters? -->
+            <map mr="shared_dma" vaddr="0x30_800_000" perms="rw" cached="true" />
         </virtual_machine>
-
-        <!-- shared memory for ring buffer mechanism -->
-        <!-- the vaddrs are just random numbers that I picked, if you're using your own dts file and
-             get an `seL4_FailedLookup` error, considering change these addresses to something else
-             that make more senses. -->
-        <map mr="avail-1" vaddr="0x30_000_000" perms="rw" cached="true" setvar_vaddr="net_rx_avail" />
-        <map mr="used-1" vaddr="0x30_200_000" perms="rw" cached="true" setvar_vaddr="net_rx_used" />
-        <map mr="avail-2" vaddr="0x30_400_000" perms="rw" cached="true" setvar_vaddr="net_tx_avail" />
-        <map mr="used-2" vaddr="0x30_600_000" perms="rw" cached="true" setvar_vaddr="net_tx_used" />
-
-        <!-- @jade: does the physical address matters? -->
-        <map mr="shared_dma" vaddr="0x30_800_000" perms="rw" cached="true" setvar_vaddr="net_shared_dma_vaddr" />
 
         <!-- PHY IRQ -->
         <irq irq="96" id="0" />
         <!-- ethernet IRQ -->
         <irq irq="40" id="1" />
+
+        <!-- mmc IRQ -->
+        <irq irq="223" id="6" />
 
         <!-- Serial IRQ -->
         <irq irq="225" id="3" trigger="edge" />
@@ -94,10 +97,10 @@
         </virtual_machine>
 
         <!-- shared memory for ring buffer mechanism -->
-        <map mr="avail-1" vaddr="0x30_000_000" perms="rw" cached="true" />
-        <map mr="used-1" vaddr="0x30_200_000" perms="rw" cached="true" />
-        <map mr="avail-2" vaddr="0x30_400_000" perms="rw" cached="true" />
-        <map mr="used-2" vaddr="0x30_600_000" perms="rw" cached="true" />
+        <map mr="uio-avail-1" vaddr="0x30_000_000" perms="rw" cached="true" setvar_vaddr="net_client_rx_avail" />
+        <map mr="uio-used-1" vaddr="0x30_200_000" perms="rw" cached="true" setvar_vaddr="net_client_rx_used" />
+        <map mr="uio-avail-2" vaddr="0x30_400_000" perms="rw" cached="true" setvar_vaddr="net_client_tx_avail" />
+        <map mr="uio-used-2" vaddr="0x30_600_000" perms="rw" cached="true" setvar_vaddr="net_client_tx_used" />
 
         <map mr="shared_dma" vaddr="0x30_800_000" perms="rw" cached="true" />
 

@@ -45,6 +45,10 @@ uintptr_t guest_ram_vaddr;
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
 
+// @jade: find a nice place
+#define NET_CLIENT_RX_CH        2
+#define NET_CLIENT_GET_MAC_CH   4
+
 static void passthrough_device_ack(size_t vcpu_id, int irq, void *cookie) {
     microkit_channel irq_ch = (microkit_channel)(int64_t)cookie;
     microkit_irq_ack(irq_ch);
@@ -63,11 +67,11 @@ static void register_passthrough_irq(int irq, microkit_channel irq_ch) {
 }
 
 /* sDDF memory regions for virtio net */
-uintptr_t net_rx_avail;
-uintptr_t net_rx_used;
-uintptr_t net_tx_avail;
-uintptr_t net_tx_used;
-uintptr_t net_shared_dma_vaddr;
+uintptr_t net_client_rx_avail;
+uintptr_t net_client_rx_used;
+uintptr_t net_client_tx_avail;
+uintptr_t net_client_tx_used;
+uintptr_t net_client_shared_dma_vaddr;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -101,17 +105,18 @@ void init(void) {
     fault_register_vm_exception_handler(VIRTIO_ADDRESS_START, VIRTIO_ADDRESS_END - VIRTIO_ADDRESS_START, &virtio_mmio_handle_fault);
 
     // Register virtio_net device
-    virtio_net_mmio_init(net_tx_avail, net_tx_used, net_tx_shared_dma_vaddr, net_rx_avail, net_rx_used, net_rx_shared_dma_vaddr);
+    virtio_net_mmio_init(net_client_tx_avail, net_client_tx_used, 
+                         net_client_rx_avail, net_client_rx_used, net_client_shared_dma_vaddr);
     virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_net_mmio_ack, NULL);
 
     /* Finally start the guest */
-    guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
+    // guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
 
 void notified(microkit_channel ch) {
     switch (ch) {
-        case VSWITCH_CONN_CH_1:
-            vswitch_rx(ch);
+        case NET_CLIENT_RX_CH:
+            net_client_rx();
             break;
         default:
             if (passthrough_irq_map[ch]) {

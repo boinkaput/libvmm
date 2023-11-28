@@ -1,0 +1,12 @@
+// this overlay contains UIO entries for the guest driver
+/ {
+	chosen {
+        bootargs = "console=ttyAML0,115200n8 root=/dev/ram0 nosmp rw debug loglevel=8 pci=nomsi earlyprintk=serial maxcpus=1 uio_pdrv_genirq.of_id=generic-uio";
+	};
+
+	uio {
+		compatible = "generic-uio\0uio";
+		reg = <0x00 0x30000000 0x00 0x200000 0x00 0x30200000 0x00 0x200000 0x00 0x30400000 0x00 0x200000 0x00 0x30600000 0x00 0x200000 0x00>;
+		interrupts = <0x00 0x0a 0x04>;
+	};
+};

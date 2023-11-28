@@ -100,10 +100,16 @@ CFLAGS := -mstrict-align \
 		  -DBOARD_$(BOARD) \
 		  -DCONFIG_$(CONFIG)
 
+CFLAGS_USERLEVEL :=	-g3 \
+		  			-O3 \
+					-Wno-unused-command-line-argument \
+		  			-Wall -Wno-unused-function -Werror \
+					-target aarch64-linux-gnu
+					
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
-all: directories $(IMAGE_FILE)
+all: directories driver_vm_userlevel $(IMAGE_FILE)
 
 qemu: all
 	# @ivanv: check that the amount of RAM given to QEMU is at least the number of RAM that QEMU is setup with for seL4.
@@ -118,6 +124,37 @@ qemu: all
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
+CURRENT_DIR := $(shell pwd)
+
+# CLIENT_VM_USERLEVEL_DIR := userlevel/client_vm
+
+# DRIVER_VM_DIR := board/$(BOARD)/blk_driver_vm
+# DRIVER_VM_DTS_DIR := $(DRIVER_VM_DIR)/dts
+DRIVER_VM_USERLEVEL_DIR := userlevel
+DRIVER_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/driver_vm_rootfs
+
+DRIVER_VM_USERLEVEL_ELFS := uio_enable_irq.elf uio_ethernet.elf uio_read.elf uio_write.elf
+# CLIENT_VM_USERLEVEL_ELFS := cmdq_test.elf
+
+DRIVER_VM_INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
+DRIVER_VM_INITRD_OVERLAYED := $(IMAGE_DIR)/rootfs_overlayed.cpio.gz
+
+# Unpack rootfs, put the userlevel binary in /root, repack rootfs
+driver_vm_userlevel: $(addprefix $(BUILD_DIR)/, $(DRIVER_VM_USERLEVEL_ELFS))
+	rm -r $(DRIVER_VM_ROOTFS_TMP_DIR) 2> /dev/null; \
+	mkdir -p $(DRIVER_VM_ROOTFS_TMP_DIR) && \
+	gunzip -dc $(DRIVER_VM_INITRD) | fakeroot cpio -idmv -D$(DRIVER_VM_ROOTFS_TMP_DIR) && \
+	cp $^ $(DRIVER_VM_ROOTFS_TMP_DIR)/root && \
+	(cd $(DRIVER_VM_ROOTFS_TMP_DIR) && find . | cpio -o -H newc -R root:root 2> /dev/null | gzip > $(CURRENT_DIR)/$(DRIVER_VM_INITRD_OVERLAYED))
+
+# client_vm_userlevel: $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_USERLEVEL_ELFS))
+# 	rm -r $(CLIENT_VM_1_ROOTFS_TMP_DIR) 2> /dev/null; \
+# 	mkdir -p $(CLIENT_VM_1_ROOTFS_TMP_DIR) && \
+# 	gunzip -dc $(CLIENT_VM_1_INITRD) | fakeroot cpio -idmv -D$(CLIENT_VM_1_ROOTFS_TMP_DIR) 2> /dev/null && \
+# 	cp $^ $(CLIENT_VM_1_ROOTFS_TMP_DIR)/root && \
+# 	(cd $(CLIENT_VM_1_ROOTFS_TMP_DIR) && find . | cpio -o -H newc -R root:root 2> /dev/null | gzip > $(CURRENT_DIR)/$(CLIENT_VM_1_INITRD_OVERLAYED))
+
+
 $(VMM_DRIVER_DTB): $(DTS) $(VMM_DRIVER_DTS_OVERLAY)
 	if ! command -v $(DTC) &> /dev/null; then echo "Could not find dependency: Device Tree Compiler (dtc)"; exit 1; fi
 	# @ivanv: Shouldn't supress warnings
@@ -130,11 +167,11 @@ $(VMM_CLIENT_DTB): $(DTS) $(VMM_CLIENT_DTS_OVERLAY)
 	cat $^ > $(BUILD_DIR)/tem.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/tem.dts > $@
 
-$(BUILD_DIR)/vmm_driver_package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(VMM_DRIVER_DTB)
+$(BUILD_DIR)/vmm_driver_package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(DRIVER_VM_INITRD_OVERLAYED) $(VMM_DRIVER_DTB)
 	$(CC) -c -g3 -x assembler-with-cpp \
 					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
 					-DGUEST_DTB_IMAGE_PATH=\"$(VMM_DRIVER_DTB)\" \
-					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
+					-DGUEST_INITRD_IMAGE_PATH=\"$(DRIVER_VM_INITRD_OVERLAYED)\" \
 					$< -o $@
 
 $(BUILD_DIR)/vmm_client_package_guest_images.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(VMM_CLIENT_DTB)
@@ -143,6 +180,12 @@ $(BUILD_DIR)/vmm_client_package_guest_images.o: $(VMM_TOOLS)/package_guest_image
 					-DGUEST_DTB_IMAGE_PATH=\"$(VMM_CLIENT_DTB)\" \
 					-DGUEST_INITRD_IMAGE_PATH=\"$(INITRD)\" \
 					$< -o $@
+
+# $(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_DIR)/%.c Makefile
+# 	$(CC) -c $(CFLAGS_USERLEVEL) $< -o $@
+
+$(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_DIR)/%.c Makefile
+	$(CC) $< -o $@
 
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@

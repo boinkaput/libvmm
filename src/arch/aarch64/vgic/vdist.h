@@ -197,7 +197,7 @@ static bool vgic_dist_set_pending_irq(vgic_t *vgic, size_t vcpu_id, int irq)
         return true;
     }
 
-    LOG_DIST("Pending set: Inject IRQ from pending set (%d)\n", irq);
+    // LOG_DIST("Pending set: Inject IRQ from pending set (%d)\n", irq);
     set_pending(dist, virq_data->virq, true, vcpu_id);
 
     /* Enqueueing an IRQ and dequeueing it right after makes little sense
