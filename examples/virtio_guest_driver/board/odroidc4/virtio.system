@@ -6,8 +6,8 @@
 -->
 <system>
     <!-- you need the phys_addr="0x20_000_000" otherwise microkit complain about lacking of space -->
-    <memory_region name="guest_ram_client" size="0x10_000_000" page_size="0x200_000"  phys_addr="0x20_000_000"/>
-    <memory_region name="guest_ram_driver" size="0x10_000_000" page_size="0x200_000" />
+    <memory_region name="guest_ram_client" size="0x10_000_000" page_size="0x200_000"/>
+    <memory_region name="guest_ram_driver" size="0x10_000_000" page_size="0x200_000" phys_addr="0x20_000_000"/>
     <memory_region name="gic_vcpu" size="0x1_000" phys_addr="0xffc06000" />
 
     <memory_region name="bus1" size="0x200000" phys_addr="0xff600000" />
@@ -28,11 +28,25 @@
     <memory_region name="vpu" size="0x100000" phys_addr="0xff900000" />
     <memory_region name="eth0" size="0x10000" phys_addr="0xff3f0000" />
 
+    <!-- shared memory for ring buffer mechanism for networking -->
+    <memory_region name="net_free_rx" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="net_used_rx" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="net_free_tx" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="net_used_tx" size="0x200_000" page_size="0x200_000"/>
+
+    <memory_region name="net_shared_dma" size="0x200_000" page_size="0x200_000" />
+
+    <!-- <memory_region name="net_rx_cookies" size="0x200_000" page_size="0x200_000"/>
+    <memory_region name="net_tx_cookies" size="0x200_000" page_size="0x200_000"/> -->
+
     <protection_domain name="VMM-client" priority="100">
         <program_image path="vmm_client.elf" />
         <map mr="guest_ram_client" vaddr="0x20000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
 
         <!-- shared memory for ring buffer mechanism -->
+        <!-- the vaddrs are just random numbers that I picked, if you're using your own dts file and
+             get an `seL4_FailedLookup` error, considering change these addresses to something else
+             that make more senses. -->
         <map mr="rx_free_serial_vmm_client" vaddr="0x30_000_000" perms="rw" cached="true" setvar_vaddr="serial_rx_free" />
         <map mr="rx_used_serial_vmm_client" vaddr="0x30_200_000" perms="rw" cached="true" setvar_vaddr="serial_rx_used" />
         <map mr="tx_free_serial_vmm_client" vaddr="0x30_400_000" perms="rw" cached="true" setvar_vaddr="serial_tx_free" />
@@ -41,13 +55,20 @@
         <map mr="tx_data_serial_vmm_client" vaddr="0x30_800_000" perms="rw" cached="true" setvar_vaddr="serial_tx_data" />
         <map mr="rx_data_serial_vmm_client" vaddr="0x30_c00_000" perms="rw" cached="true" setvar_vaddr="serial_rx_data" />
 
+        <map mr="net_free_rx" vaddr="0x30_e00_000" perms="rw" cached="true" setvar_vaddr="net_client_rx_free" />
+        <map mr="net_used_rx" vaddr="0x31_000_000" perms="rw" cached="true" setvar_vaddr="net_client_rx_used" />
+        <map mr="net_free_tx" vaddr="0x31_200_000" perms="rw" cached="true" setvar_vaddr="net_client_tx_free" />
+        <map mr="net_used_tx" vaddr="0x31_400_000" perms="rw" cached="true" setvar_vaddr="net_client_tx_used" />
+
+        <map mr="net_shared_dma" vaddr="0x31_600_000" perms="rw" cached="true" setvar_vaddr="net_client_shared_dma_vaddr" />
+
         <virtual_machine name="linux-client" id="0" priority="100">
             <map mr="guest_ram_client" vaddr="0x20000000" perms="rwx" />
             <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" cached="false" />
         </virtual_machine>
     </protection_domain>
 
-    <protection_domain name="VMM-driver" priority="100">
+    <protection_domain name="VMM-driver" priority="100" pp="true">
         <program_image path="vmm_driver.elf" />
         <map mr="guest_ram_driver" vaddr="0x20000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
 
@@ -60,7 +81,17 @@
         <map mr="tx_data_serial_vmm_driver" vaddr="0x30_a00_000" perms="rw" cached="true" setvar_vaddr="serial_tx_data" />
         <map mr="rx_data_serial_vmm_driver" vaddr="0x30_e00_000" perms="rw" cached="true" setvar_vaddr="serial_rx_data" />
 
-        <virtual_machine name="linux-driver" id="0" priority="100">
+        <!-- <map mr="net_free_rx" vaddr="0x30_e00_000" perms="rw" cached="true" setvar_vaddr="net_driver_rx_free" />
+        <map mr="net_used_rx" vaddr="0x31_000_000" perms="rw" cached="true" setvar_vaddr="net_driver_rx_used" />
+        <map mr="net_free_tx" vaddr="0x31_200_000" perms="rw" cached="true" setvar_vaddr="net_driver_tx_free" />
+        <map mr="net_used_tx" vaddr="0x31_400_000" perms="rw" cached="true" setvar_vaddr="net_driver_tx_used" />
+
+        <map mr="net_shared_dma" vaddr="0x31_600_000" perms="rw" cached="true" setvar_vaddr="net_driver_shared_dma_vaddr" /> -->
+
+        <!-- @jade: do we need this? -->
+        <setvar symbol="net_driver_shared_dma_paddr" region_paddr="net_shared_dma" />
+
+        <virtual_machine name="linux-driver" id="0" priority="100" >
             <map mr="guest_ram_driver" vaddr="0x20000000" perms="rwx" />
             <map mr="gic_vcpu" vaddr="0xffc02000" perms="rw" cached="false" />
 
@@ -76,6 +107,13 @@
             <map mr="gpu" vaddr="0xffe40000" perms="rw" cached="false" />
             <map mr="vpu" vaddr="0xff900000" perms="rw" cached="false" />
             <map mr="eth0" vaddr="0xff3f0000" perms="rw" cached="false" />
+
+        <map mr="net_free_rx" vaddr="0x30_e00_000" perms="rw" cached="true" />
+        <map mr="net_used_rx" vaddr="0x31_000_000" perms="rw" cached="true" />
+        <map mr="net_free_tx" vaddr="0x31_200_000" perms="rw" cached="true" />
+        <map mr="net_used_tx" vaddr="0x31_400_000" perms="rw" cached="true" />
+
+        <map mr="net_shared_dma" vaddr="0x31_600_000" perms="rw" cached="true" />
         </virtual_machine>
 
         <!-- PHY IRQ -->
@@ -197,5 +235,20 @@
     <channel>
         <end pd="uart_driver" id="10"/>
         <end pd="serial_mux_rx" id="11"/>
+    </channel>
+
+    <channel>
+        <end pd="VMM-driver" id="3"/>
+        <end pd="VMM-client" id="3"/>
+    </channel>
+
+    <channel>
+        <end pd="VMM-driver" id="4"/>
+        <end pd="VMM-client" id="4"/>
+    </channel>
+
+    <channel>
+        <end pd="VMM-driver" id="5"/>
+        <end pd="VMM-client" id="5"/>
     </channel>
 </system>

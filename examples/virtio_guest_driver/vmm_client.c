@@ -15,7 +15,7 @@
 #include "tcb.h"
 #include "vcpu.h"
 #include "virtio/console.h"
-#include "serial/libserialsharedringbuffer/include/shared_ringbuffer.h"
+#include "virtio/net.h"
 
 /*
  * As this is just an example, for simplicity we just make the size of the
@@ -46,6 +46,7 @@ extern char _guest_initrd_image_end[];
 /* Microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
+/* virtio console configurations */
 uintptr_t serial_rx_free;
 uintptr_t serial_rx_used;
 uintptr_t serial_tx_free;
@@ -57,16 +58,29 @@ uintptr_t serial_tx_data;
 #define SERIAL_MUX_TX_CH 1
 #define SERIAL_MUX_RX_CH 2
 
-#define NET_MUX_RX_CH 3
-#define NET_MUX_TX_CH 4
-#define NET_MUX_GET_MAC_CH 5
-
 #define VIRTIO_CONSOLE_IRQ (74)
 #define VIRTIO_CONSOLE_BASE (0x130000)
 #define VIRTIO_CONSOLE_SIZE (0x1000)
 
 static struct virtio_device virtio_console;
-// static struct virtio_device virtio_net;
+
+/* virtio net configurations */
+uintptr_t net_client_rx_free;
+uintptr_t net_client_rx_used;
+uintptr_t net_client_tx_free;
+uintptr_t net_client_tx_used;
+uintptr_t net_client_shared_dma_vaddr;
+uintptr_t net_client_shared_dma_paddr;
+
+#define NET_MUX_RX_CH 3
+#define NET_MUX_TX_CH 4
+#define NET_MUX_GET_MAC_CH 5
+
+#define VIRTIO_NET_IRQ (75)
+#define VIRTIO_NET_BASE (0x140000)
+#define VIRTIO_NET_SIZE (0x1000)
+
+static struct virtio_device virtio_net;
 
 void init(void) {
     /* Initialise the VMM, the VCPU(s), and start the guest */
@@ -96,7 +110,7 @@ void init(void) {
         return;
     }
 
-    // virtio console
+    /* Initialise virtio console */
     virtio_console_init(&virtio_console, 
                         serial_rx_free, serial_rx_used, serial_tx_free, serial_tx_used,
                         serial_rx_data, serial_tx_data,
@@ -116,6 +130,26 @@ void init(void) {
     success = virq_register(GUEST_VCPU_ID, VIRTIO_CONSOLE_IRQ, &virtio_virq_default_ack, NULL);
     assert(success);
 
+    /* Initialise virtio net */
+    virtio_net_init(&virtio_net, 
+                    net_client_rx_free, net_client_rx_used, net_client_tx_free, net_client_tx_used,
+                    net_client_shared_dma_vaddr, 
+                    VIRTIO_NET_IRQ, NET_MUX_TX_CH, NET_MUX_GET_MAC_CH);
+
+    success = fault_register_vm_exception_handler(VIRTIO_NET_BASE, VIRTIO_NET_SIZE,
+                                                    &virtio_mmio_fault_handle, &virtio_net);
+    if (!success) {
+        LOG_VMM_ERR("Could not register virtual memory fault handler for "
+                    "virtIO region [0x%lx..0x%lx)\n", VIRTIO_NET_BASE, VIRTIO_NET_BASE + VIRTIO_NET_SIZE);
+        return;
+    }
+
+    /* Register the virtual IRQ that will be used to communicate from the device
+     * to the guest. This assumes that the interrupt controller is already setup. */
+    // @ivanv: we should check that (on AArch64) the virq is an SPI.
+    success = virq_register(GUEST_VCPU_ID, VIRTIO_NET_IRQ, &virtio_virq_default_ack, NULL);
+    assert(success);
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
@@ -129,12 +163,12 @@ void notified(microkit_channel ch) {
             break;
         }
 
-        // case NET_MUX_RX_CH: {
-        //     /* We have received an event from the net multipelxor, so we
-        //      * call the virtIO net handling */
-        //     net_client_rx(&virtio_net);
-        //     break;
-        // }
+        case NET_MUX_RX_CH: {
+            /* We have received an event from the net multipelxor, so we
+             * call the virtIO net handling */
+            net_client_rx(&virtio_net);
+            break;
+        }
 
         default:
             printf("Unexpected channel, ch: 0x%lx\n", ch);

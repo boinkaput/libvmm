@@ -15,7 +15,6 @@
 #include "tcb.h"
 #include "vcpu.h"
 #include "virtio/console.h"
-#include "serial/libserialsharedringbuffer/include/shared_ringbuffer.h"
 
 /*
  * As this is just an example, for simplicity we just make the size of the
@@ -54,6 +53,14 @@ uintptr_t serial_tx_used;
 uintptr_t serial_rx_data;
 uintptr_t serial_tx_data;
 
+// @jade: how do I tell the userlevel program about these?
+uintptr_t net_driver_rx_free;
+uintptr_t net_driver_rx_used;
+uintptr_t net_driver_tx_free;
+uintptr_t net_driver_tx_used;
+uintptr_t net_driver_shared_dma_vaddr;
+uintptr_t net_driver_shared_dma_paddr;
+
 #define SERIAL_MUX_TX_CH 1
 #define SERIAL_MUX_RX_CH 2
 
@@ -65,10 +72,16 @@ uintptr_t serial_tx_data;
 #define VIRTIO_CONSOLE_BASE (0x130000)
 #define VIRTIO_CONSOLE_SIZE (0x1000)
 
+#define UIO_IRQ (73)
+
 static struct virtio_device virtio_console;
 
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
+
+static void uio_ack(uint64_t vcpu_id, int irq, void *cookie) {
+    printf("uio_ack!!!!!!!!!!\n");
+}
 
 static void passthrough_device_ack(size_t vcpu_id, int irq, void *cookie) {
     microkit_channel irq_ch = (microkit_channel)(int64_t)cookie;
@@ -145,8 +158,36 @@ void init(void) {
     success = virq_register(GUEST_VCPU_ID, VIRTIO_CONSOLE_IRQ, &virtio_virq_default_ack, NULL);
     assert(success);
 
+    int err = virq_register(GUEST_VCPU_ID, UIO_IRQ, &uio_ack, NULL);
+    if (!err) {
+        LOG_VMM_ERR("Failed to register IRQ %d\n", UIO_IRQ);
+        return;
+    }
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
+}
+
+seL4_MessageInfo_t
+protected(microkit_channel ch, microkit_msginfo msginfo)
+{
+    switch (ch) {
+        case NET_MUX_GET_MAC_CH:
+            // return the MAC address. 
+            //odroidc4-2: 00:1E:06:4A:35:E4
+            // FIXME(@jade): absolutely hacky.
+            uint32_t mac_l = 0x4a061e00;
+            uint32_t mac_h = 0xe435;
+            microkit_mr_set(0, mac_l);
+            microkit_mr_set(1, mac_h);
+            return microkit_msginfo_new(0, 2);
+            
+        default:
+            // microkit_dbg_puts("Received ppc on unexpected channel ");
+            // puthex64(ch);
+            break;
+    }
+    return microkit_msginfo_new(0, 0);
 }
 
 void notified(microkit_channel ch) {
@@ -155,6 +196,14 @@ void notified(microkit_channel ch) {
             /* We have received an event from the serial multipelxor, so we
              * call the virtIO console handling */
             virtio_console_handle_rx(&virtio_console);
+            break;
+        }
+        case NET_MUX_RX_CH:
+        case NET_MUX_GET_MAC_CH: {
+                bool success = virq_inject(GUEST_VCPU_ID, UIO_IRQ);
+                if (!success) {
+                    LOG_VMM_ERR("IRQ %d dropped on vCPU %d\n", UIO_IRQ, GUEST_VCPU_ID);
+                }
             break;
         }
         default:

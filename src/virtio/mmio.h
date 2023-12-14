@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include "util/util.h"
 #include "virtio/virtq.h"
-#include "serial/libserialsharedringbuffer/include/shared_ringbuffer.h"
 
 // table 4.1
 #define VIRTIO_MMIO_DEV_MAGIC               0x74726976 // "virt"
@@ -103,6 +102,9 @@ typedef struct virtio_device_info {
 
     // uint32_t ConfigGeneration;
 } virtio_device_info_t;
+
+/* each type of device has it's own ring handle structure */
+typedef struct ring_handle ring_handle_t;
 
 /* Everything needed at runtime for a virtIO device to function. */
 typedef struct virtio_device {

@@ -42,10 +42,14 @@ int main(int argc, char *argv[])
     if ((dataport = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, region * getpagesize())) == (void *) -1) {
         printf("mmap failed, errno: %d\n", errno);
         close(fd);
-	return 1;
+	    return 1;
     }
 
-    printf("%s\n", dataport);
+    // printf("%s\n", dataport);
+    for (int i = 0; i < length && dataport[i] != 0; i++) {
+        printf("%c", dataport[i]);
+    }
+    printf("\n");
 
     munmap(dataport, length);
     close(fd);

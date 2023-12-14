@@ -74,6 +74,7 @@ INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 
 SDDF := sddf
 SDDF_SERIAL_RINGBUFFER := $(SDDF)/serial/libserialsharedringbuffer
+SDDF_ETH_RINGBUFFER := $(SDDF)/network/libethsharedringbuffer
 SDDF_SERIAL_COMPONENTS := $(SDDF)/serial/components
 # SDDF_SERIAL_DRIVER := $(SDDF)/drivers/serial/arm
 SDDF_SERIAL_DRIVER := $(SDDF)/drivers/serial/meson
@@ -101,7 +102,8 @@ VMM_DRIVER_OBJS := vmm_driver.o \
 			vcpu.o \
 			mmio.o \
 			console.o \
-			shared_ringbuffer.o
+			serial_shared_ringbuffer.o \
+			net_shared_ringbuffer.o
 
 VMM_CLIENT_OBJS := vmm_client.o \
 			printf.o \
@@ -119,11 +121,13 @@ VMM_CLIENT_OBJS := vmm_client.o \
 			vcpu.o \
 			mmio.o \
 			console.o \
-			shared_ringbuffer.o
+			net.o \
+			serial_shared_ringbuffer.o \
+			net_shared_ringbuffer.o
 
-SERIAL_MUX_TX_OBJS := mux_tx.o shared_ringbuffer.o
-SERIAL_MUX_RX_OBJS := mux_rx.o shared_ringbuffer.o
-SERIAL_DRIVER_OBJS := uart.o shared_ringbuffer.o
+SERIAL_MUX_TX_OBJS := mux_tx.o serial_shared_ringbuffer.o
+SERIAL_MUX_RX_OBJS := mux_rx.o serial_shared_ringbuffer.o
+SERIAL_DRIVER_OBJS := uart.o serial_shared_ringbuffer.o
 
 # Toolchain flags
 # FIXME: For optimisation we should consider providing the flag -mcpu.
@@ -141,6 +145,8 @@ CFLAGS := -mstrict-align \
 		  -Wall -Wno-unused-function -Werror \
 		  -I$(VMM_SRC_DIR)/arch/aarch64 -I$(VMM_SRC_DIR) -I$(VMM_SRC_DIR)/util -I$(BOARD_DIR)/include \
 		  -I$(SDDF_SERIAL_RINGBUFFER)/include \
+		  -I$(SDDF)/include \
+		  -I$(SDDF)/util/include \
 		  -I$(SDDF_SERIAL_DRIVER)/include \
 		  -I$(SDDF) \
 		  -DBOARD_$(BOARD) \
@@ -211,6 +217,9 @@ $(BUILD_DIR)/package_guest_images_driver.o: $(VMM_TOOLS)/package_guest_images.S 
 $(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_DIR)/%.c Makefile
 	$(CC) $< -o $@
 
+$(BUILD_DIR)/vmm_driver.elf: $(addprefix $(BUILD_DIR)/, $(VMM_DRIVER_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
@@ -232,7 +241,10 @@ $(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/virtio/%.c Makefile
 $(BUILD_DIR)/%.o: $(SDDF_SERIAL_COMPONENTS)/%.c Makefile
 	$(CC) -c $(CFLAGS) -DNUM_CLIENTS=2 $< -o $@
 
-$(BUILD_DIR)/%.o: $(SDDF_SERIAL_RINGBUFFER)/%.c Makefile
+$(BUILD_DIR)/serial_%.o: $(SDDF_SERIAL_RINGBUFFER)/%.c Makefile
+	$(CC) -c $(CFLAGS) $< -o $@
+
+$(BUILD_DIR)/net_%.o: $(SDDF_ETH_RINGBUFFER)/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o: $(SDDF_SERIAL_DRIVER)/%.c Makefile

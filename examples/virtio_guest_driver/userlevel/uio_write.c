@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     if ((dataport = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, region * getpagesize())) == (void *) -1) {
         printf("mmap failed\n");
         close(fd);
-	return 1;
+	    return 1;
     }
 
     int i = 0;
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
         i++;
 	ch = getchar();
     }
-    dataport[i] = '\0';
+    dataport[i] = 0;
     printf("byte written: %d\n", i);
     munmap(dataport, length);
     close(fd);

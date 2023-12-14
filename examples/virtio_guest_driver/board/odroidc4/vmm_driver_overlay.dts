@@ -4,7 +4,7 @@
 / {
 
 	chosen {
-        bootargs = "console=hvc0 earlycon=hvc0 root=/dev/ram0 nosmp rw debug loglevel=8 pci=nomsi earlyprintk=serial maxcpus=1";
+        bootargs = "console=hvc0 earlycon=hvc0 root=/dev/ram0 nosmp rw debug loglevel=8 pci=nomsi uio_pdrv_genirq.of_id=generic-uio earlyprintk=serial maxcpus=1";
 	};
 
 	virtio-console@0130000 {
@@ -13,7 +13,11 @@
 		interrupts = <0x00 42 0x04>;
 	};
 
-	// uio
+	uio-net {
+		compatible = "generic-uio\0uio";
+		reg = <0x00 0x30e00000 0x00 0x200000 0x00 0x31000000 0x00 0x200000 0x00 0x31200000 0x00 0x200000 0x00 0x31400000 0x00 0x200000 0x00 0x31600000 0x00 0x200000>;
+		interrupts = <0x00 41 0x04>;
+	};
 
 	soc {
 		// /delete-node/ bus@ff800000/serial@3000;

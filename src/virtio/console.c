@@ -3,6 +3,7 @@
 #include "virtio/console.h"
 #include "util/util.h"
 #include "virq.h"
+#include "serial/libserialsharedringbuffer/include/shared_ringbuffer.h"
 
 /* Uncomment this to enable debug logging */
 // #define DEBUG_CONSOLE
@@ -136,9 +137,9 @@ static int virtio_console_handle_tx(struct virtio_device *dev) {
             uintptr_t sddf_buffer = 0;
             unsigned int sddf_buffer_len = 0;
             void *sddf_cookie = NULL;
-            LOG_CONSOLE("tx ring free size: 0x%lx, tx ring used size: 0x%lx\n", ring_size(dev->sddf_tx_ring->free_ring), ring_size(dev->sddf_tx_ring->used_ring));
-            assert(!ring_empty(dev->sddf_tx_ring->free_ring));
-            int ret = dequeue_free(dev->sddf_tx_ring, &sddf_buffer, &sddf_buffer_len, &sddf_cookie);
+            LOG_CONSOLE("tx ring free size: 0x%lx, tx ring used size: 0x%lx\n", serial_ring_size(dev->sddf_tx_ring->free_ring), serial_ring_size(dev->sddf_tx_ring->used_ring));
+            assert(!serial_ring_empty(dev->sddf_tx_ring->free_ring));
+            int ret = serial_dequeue_free(dev->sddf_tx_ring, &sddf_buffer, &sddf_buffer_len, &sddf_cookie);
             assert(!ret);
             if (ret != 0) {
                 LOG_CONSOLE_ERR("could not dequeue from the TX free ring\n");
@@ -155,9 +156,9 @@ static int virtio_console_handle_tx(struct virtio_device *dev) {
              * by the multiplexor. */
             memcpy((char *) sddf_buffer, (char *) desc.addr, desc.len);
 
-            bool is_empty = ring_empty(dev->sddf_tx_ring->used_ring);
+            bool is_empty = serial_ring_empty(dev->sddf_tx_ring->used_ring);
             /* Now we can enqueue our buffer into the used TX ring */
-            ret = enqueue_used(dev->sddf_tx_ring, sddf_buffer, desc.len, sddf_cookie);
+            ret = serial_enqueue_used(dev->sddf_tx_ring, sddf_buffer, desc.len, sddf_cookie);
             // @ivanv: handle case in release made
             assert(ret == 0);
 
@@ -206,7 +207,7 @@ int virtio_console_handle_rx(struct virtio_device *dev) {
     uintptr_t sddf_buffer = 0;
     unsigned int sddf_buffer_len = 0;
     void *sddf_cookie = NULL;
-    int ret = dequeue_used(dev->sddf_rx_ring, &sddf_buffer, &sddf_buffer_len, &sddf_cookie);
+    int ret = serial_dequeue_used(dev->sddf_rx_ring, &sddf_buffer, &sddf_buffer_len, &sddf_cookie);
     assert(!ret);
     if (ret != 0) {
         LOG_CONSOLE_ERR("could not dequeue from RX used ring\n");
@@ -251,7 +252,7 @@ int virtio_console_handle_rx(struct virtio_device *dev) {
     }
 
     // 4. Enqueue sDDF buffer into RX free ring
-    ret = enqueue_free(dev->sddf_rx_ring, sddf_buffer, BUFFER_SIZE, sddf_cookie);
+    ret = serial_enqueue_free(dev->sddf_rx_ring, sddf_buffer, BUFFER_SIZE, sddf_cookie);
     assert(!ret);
     // @ivanv: error handle for release mode
 
@@ -275,18 +276,18 @@ void virtio_console_init(struct virtio_device *dev,
 {
 
     /* Initialise our sDDF ring buffers for the serial device */
-    ring_init(&serial_rx_ring, (ring_buffer_t *)serial_rx_free, (ring_buffer_t *)serial_rx_used, true, NUM_BUFFERS, NUM_BUFFERS);
+    serial_ring_init(&serial_rx_ring, (ring_buffer_t *)serial_rx_free, (ring_buffer_t *)serial_rx_used, true, NUM_BUFFERS, NUM_BUFFERS);
     for (int i = 0; i < NUM_BUFFERS - 1; i++) {
-        int ret = enqueue_free(&serial_rx_ring, serial_rx_data + (i * BUFFER_SIZE), BUFFER_SIZE, NULL);
+        int ret = serial_enqueue_free(&serial_rx_ring, serial_rx_data + (i * BUFFER_SIZE), BUFFER_SIZE, NULL);
         if (ret != 0) {
             microkit_dbg_puts(microkit_name);
             microkit_dbg_puts(": server rx buffer population, unable to enqueue buffer\n");
         }
     }
-    ring_init(&serial_tx_ring, (ring_buffer_t *)serial_tx_free, (ring_buffer_t *)serial_tx_used, true, NUM_BUFFERS, NUM_BUFFERS);
+    serial_ring_init(&serial_tx_ring, (ring_buffer_t *)serial_tx_free, (ring_buffer_t *)serial_tx_used, true, NUM_BUFFERS, NUM_BUFFERS);
     for (int i = 0; i < NUM_BUFFERS - 1; i++) {
         // Have to start at the memory region left of by the rx ring
-        int ret = enqueue_free(&serial_tx_ring, serial_tx_data + ((i + NUM_BUFFERS) * BUFFER_SIZE), BUFFER_SIZE, NULL);
+        int ret = serial_enqueue_free(&serial_tx_ring, serial_tx_data + ((i + NUM_BUFFERS) * BUFFER_SIZE), BUFFER_SIZE, NULL);
         assert(ret == 0);
         if (ret != 0) {
             microkit_dbg_puts(microkit_name);
@@ -294,8 +295,8 @@ void virtio_console_init(struct virtio_device *dev,
         }
     }
     /* Neither ring should be plugged and hence all buffers we send should actually end up at the driver. */
-    assert(!ring_plugged(serial_tx_ring.free_ring));
-    assert(!ring_plugged(serial_tx_ring.used_ring));
+    assert(!serial_ring_plugged(serial_tx_ring.free_ring));
+    assert(!serial_ring_plugged(serial_tx_ring.used_ring));
 
     // @ivanv: check that num_vqs is greater than the minimum vqs to function?
     dev->data.DeviceID = DEVICE_ID_VIRTIO_CONSOLE;

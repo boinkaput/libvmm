@@ -45,8 +45,6 @@
 // we (@jade) might work on supporting them in the future
 #define VIRTIO_NET_NUM_VIRTQ 2
 
-#pragma once
-
 #define PR_MAC802_ADDR  "%x:%x:%x:%x:%x:%x"
 
 // @jade: all these helper code should not be part of the virtio lib. Need to figure
@@ -73,11 +71,11 @@ struct ether_addr {
     uint8_t crc[4];
 } __attribute__ ((__packed__));
 
-uint8_t null_macaddr[6] = {0, 0, 0, 0, 0, 0};
-uint8_t bcast_macaddr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-uint8_t ipv6_multicast_macaddr[6] = {0x33, 0x33, 0x0, 0x0, 0x0, 0x0};
+// static uint8_t null_macaddr[6] = {0, 0, 0, 0, 0, 0};
+static uint8_t bcast_macaddr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t ipv6_multicast_macaddr[6] = {0x33, 0x33, 0x0, 0x0, 0x0, 0x0};
 
-inline bool mac802_addr_eq_num(uint8_t *addr0, uint8_t *addr1, unsigned int num)
+static inline bool mac802_addr_eq_num(uint8_t *addr0, uint8_t *addr1, unsigned int num)
 {
     for (int i = 0; i < num; i++) {
         if (addr0[i] != addr1[i]) {
@@ -87,24 +85,25 @@ inline bool mac802_addr_eq_num(uint8_t *addr0, uint8_t *addr1, unsigned int num)
     return true;
 }
 
-inline bool mac802_addr_eq(uint8_t *addr0, uint8_t *addr1)
+static inline bool mac802_addr_eq(uint8_t *addr0, uint8_t *addr1)
 {
     return mac802_addr_eq_num(addr0, addr1, 6);
 }
 
-inline bool mac802_addr_eq_bcast(uint8_t *addr)
+static inline bool mac802_addr_eq_bcast(uint8_t *addr)
 {
     return mac802_addr_eq(addr, bcast_macaddr);
 }
 
-inline bool mac802_addr_eq_ipv6_mcast(uint8_t *addr)
+static inline bool mac802_addr_eq_ipv6_mcast(uint8_t *addr)
 {
     return mac802_addr_eq_num(addr, ipv6_multicast_macaddr, 2);
 }
 
 void virtio_net_init(struct virtio_device *dev,
-                     struct virtio_queue_handler *vqs, size_t num_vqs,
+                     uintptr_t net_client_rx_free, uintptr_t net_client_rx_used,
+                     uintptr_t net_client_tx_free, uintptr_t net_client_tx_used,
+                     uintptr_t net_client_shared_dma_vaddr,
                      size_t virq,
-                     ring_handle_t *sddf_rx_ring, ring_handle_t *sddf_tx_ring,
                      size_t sddf_mux_tx_ch, size_t addf_mux_get_mac_ch);
-int net_client_rx(struct virtio_device *dev);
+bool net_client_rx(struct virtio_device *dev);
