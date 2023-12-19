@@ -85,7 +85,7 @@ wget https://trustworthy.systems/Downloads/microkit/microkit-sdk-dev-4f717f2-mac
 tar xf microkit-sdk-dev-4f717f2-macos-aarch64.tar.gz
 ```
 
-On macoS (Intel/x86-64):
+On macOS (Intel/x86-64):
 ```sh
 wget https://trustworthy.systems/Downloads/microkit/microkit-sdk-dev-4f717f2-macos-x86-64.tar.gz
 tar xf microkit-sdk-dev-4f717f2-macos-x86-64.tar.gz
