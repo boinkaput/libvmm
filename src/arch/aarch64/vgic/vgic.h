@@ -14,8 +14,9 @@
 // @ivanv: either this should all be compile time or all runtime
 // as in initialising the vgic should depend on the runtime values
 #if defined(BOARD_qemu_arm_virt)
-#define GIC_V2
+#define GIC_V3
 #define GIC_DIST_PADDR      0x8000000
+#define GIC_REDIST_PADDR    0x80a0000
 #elif defined(BOARD_odroidc2_hyp)
 #define GIC_V2
 #define GIC_DIST_PADDR      0xc4301000
