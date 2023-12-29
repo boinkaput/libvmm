@@ -428,10 +428,14 @@ bool fault_handle(size_t vcpu_id, microkit_msginfo msginfo) {
              * to what has gone wrong. */
             tcb_print_regs(vcpu_id);
             vcpu_print_regs(vcpu_id);
+            return false;
     }
 
     if (!success) {
         LOG_VMM_ERR("Failed to handle %s fault\n", fault_to_string(label));
+        microkit_vm_stop(vcpu_id);
+        tcb_print_regs(vcpu_id);
+        vcpu_print_regs(vcpu_id);
     }
 
     return success;

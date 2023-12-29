@@ -431,12 +431,14 @@ static bool vgic_dist_reg_write(size_t vcpu_id, vgic_t *vgic, uint64_t offset, u
     switch (offset) {
     case RANGE32(GIC_DIST_CTLR, GIC_DIST_CTLR):
         data = fault_get_data(regs, fsr);
-        if (data == GIC_ENABLED) {
+        LOG_DIST("GIC_ENABLED is 0x%lx\n", GIC_ENABLED);
+        if (data & GIC_ENABLED) {
             vgic_dist_enable(gic_dist);
         } else if (data == 0) {
             vgic_dist_disable(gic_dist);
         } else {
-            LOG_VMM_ERR("Unknown enable register encoding");
+            LOG_VMM_ERR("Unknown enable register encoding of 0x%lx\n", data);
+            while (1) {}
             // @ivanv: goto ignore fault?
         }
         break;

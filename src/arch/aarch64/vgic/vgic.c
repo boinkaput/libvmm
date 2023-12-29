@@ -106,11 +106,11 @@ bool handle_vgic_dist_fault(size_t vcpu_id, uint64_t fault_addr, uint64_t fsr, s
     uint64_t offset = fault_addr - GIC_DIST_PADDR;
     bool success = false;
     if (fault_is_read(fsr)) {
-        // printf("VGIC|INFO: Read dist\n");
+        LOG_DIST("read at 0x%lx\n", offset);
         success = vgic_dist_reg_read(vcpu_id, &vgic, offset, fsr, regs);
         assert(success);
     } else {
-        // printf("VGIC|INFO: Write dist\n");
+        LOG_DIST("write at 0x%lx\n", offset);
         success = vgic_dist_reg_write(vcpu_id, &vgic, offset, fsr, regs);
         assert(success);
     }

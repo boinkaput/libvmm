@@ -21,11 +21,7 @@
  * across platforms. */
 #define SERIAL_IRQ_CH 1
 
-#if defined(BOARD_qemu_arm_virt)
 #define SERIAL_IRQ 33
-#else
-#error Need to define serial interrupt
-#endif
 
 /* Data for the guest's kernel image. */
 extern char _guest_kernel_image[];

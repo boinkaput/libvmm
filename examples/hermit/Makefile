@@ -55,11 +55,11 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(BOARD)/$(CONFIG)
 VMM := ../../
 VMM_TOOLS := $(VMM)/tools
 VMM_SRC_DIR := $(VMM)/src
-SYSTEM_DESCRIPTION := board/$(BOARD)/simple.system
+SYSTEM_DESCRIPTION := board/$(BOARD)/hermit.system
 
 IMAGE_DIR := board/$(BOARD)
 HERMIT_LOADER := $(IMAGE_DIR)/hermit-loader-aarch64.bin
-HERMIT_KERNEL := $(IMAGE_DIR)/hermit-rs-template
+HERMIT_KERNEL := $(IMAGE_DIR)/hermit-hello-world
 DTS := $(IMAGE_DIR)/hermit.dts
 DTB := $(BUILD_DIR)/hermit.dtb
 
@@ -98,7 +98,7 @@ all: directories $(IMAGE_FILE)
 qemu: all
 	# @ivanv: check that the amount of RAM given to QEMU is at least the number of RAM that QEMU is setup with for seL4.
 	if ! command -v $(QEMU) &> /dev/null; then echo "Could not find dependency: qemu-system-aarch64"; exit 1; fi
-	$(QEMU) -machine virt,virtualization=on,highmem=off,secure=off \
+	$(QEMU) -machine virt,virtualization=on,highmem=off,secure=off,gic-version=3 \
 			-cpu cortex-a53 \
 			-serial mon:stdio \
 			-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \

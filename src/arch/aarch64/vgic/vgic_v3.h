@@ -5,6 +5,14 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#define DEBUG_REDIST
+
+#if defined(DEBUG_REDIST)
+#define LOG_REDIST(...) do{ printf("VGIC|REDIST: "); printf(__VA_ARGS__); }while(0)
+#else
+#define LOG_REDIST(...) do{}while(0)
+#endif
+
 #define GIC_500_GRP0     (1 << 0)
 #define GIC_500_GRP1_NS  (1 << 1)
 #define GIC_500_GRP1_S   (1 << 2)
@@ -21,7 +29,10 @@ struct gic_dist_map {
     uint32_t ctlr;                /* 0x0000 */
     uint32_t typer;               /* 0x0004 */
     uint32_t iidr;                /* 0x0008 */
-    uint32_t res1[13];            /* [0x000C, 0x0040) */
+    uint32_t typer2;               /* 0x000C */
+    uint32_t statusr;
+    uint32_t res1[3];            /* [0x000C, 0x0040) */
+    uint32_t implementation_defined[8];
     uint32_t setspi_nsr;          /* 0x0040 */
     uint32_t res2;                /* 0x0044 */
     uint32_t clrspi_nsr;          /* 0x0048 */
@@ -78,7 +89,7 @@ struct gic_redist_map {          /* Starting */
     uint32_t    ctlr;           /* 0x0000 */
     uint32_t    iidr;           /* 0x0004 */
     uint64_t    typer;          /* 0x008 */
-    uint32_t    res0;           /* 0x0010 */
+    uint32_t    statusr;           /* 0x0010 */
     uint32_t    waker;          /* 0x0014 */
     uint32_t    res1[21];       /* 0x0018 */
     uint64_t    propbaser;      /* 0x0070 */
@@ -99,28 +110,28 @@ struct gic_redist_map {          /* Starting */
 };
 
 /* Memory map for the GIC Redistributor Registers for the SGI and PPI's */
-// struct gic_redist_sgi_ppi_map {  /* Starting */
-//     uint32_t    res0[32];       /* 0x0000 */
-//     uint32_t    igroup[32];     /* 0x0080 */
-//     uint32_t    isenable[32];   /* 0x0100 */
-//     uint32_t    icenable[32];   /* 0x0180 */
-//     uint32_t    ispend[32];     /* 0x0200 */
-//     uint32_t    icpend[32];     /* 0x0280 */
-//     uint32_t    isactive[32];   /* 0x0300 */
-//     uint32_t    icactive[32];   /* 0x0380 */
-//     uint32_t    ipriorityrn[8]; /* 0x0400 */
-//     uint32_t    res1[504];      /* 0x0420 */
-//     uint32_t    icfgrn_ro;      /* 0x0C00 */
-//     uint32_t    icfgrn_rw;      /* 0x0C04 */
-//     uint32_t    res2[62];       /* 0x0C08 */
-//     uint32_t    igrpmod[64];    /* 0x0D00 */
-//     uint32_t    nsac;           /* 0x0E00 */
-//     uint32_t    res11[11391];   /* 0x0E04 */
-//     uint32_t    miscstatsr;     /* 0xC000 */
-//     uint32_t    res3[31];       /* 0xC004 */
-//     uint32_t    ppisr;          /* 0xC080 */
-//     uint32_t    res4[4062];     /* 0xC084 */
-// };
+struct gic_redist_sgi_ppi_map {
+    uint32_t    res0[32];       /* 0x0000 */
+    uint32_t    igroup[32];     /* 0x0080 */
+    uint32_t    isenable[32];   /* 0x0100 */
+    uint32_t    icenable[32];   /* 0x0180 */
+    uint32_t    ispend[32];     /* 0x0200 */
+    uint32_t    icpend[32];     /* 0x0280 */
+    uint32_t    isactive[32];   /* 0x0300 */
+    uint32_t    icactive[32];   /* 0x0380 */
+    uint32_t    ipriorityrn[8]; /* 0x0400 */
+    uint32_t    res1[504];      /* 0x0420 */
+    uint32_t    icfgrn_ro;      /* 0x0C00 */
+    uint32_t    icfgrn_rw;      /* 0x0C04 */
+    uint32_t    res2[62];       /* 0x0C08 */
+    uint32_t    igrpmod[64];    /* 0x0D00 */
+    uint32_t    nsac;           /* 0x0E00 */
+    uint32_t    res11[11391];   /* 0x0E04 */
+    uint32_t    miscstatsr;     /* 0xC000 */
+    uint32_t    res3[31];       /* 0xC004 */
+    uint32_t    ppisr;          /* 0xC080 */
+    uint32_t    res4[4062];     /* 0xC084 */
+};
 
 /*
  * GIC Distributor Register Map
