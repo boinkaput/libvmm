@@ -8,9 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
-#include <errno.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -21,7 +19,7 @@ int main(int argc, char *argv[])
 
     if (argc != 4) {
         printf("Usage: %s file dataport_size map_index\n\n"
-               "Reads the c string contents of a specified dataport file to stdout\n",
+               "Writes stdin to a specified dataport file as a c string\n",
                argv[0]);
         return 1;
     }
@@ -31,26 +29,27 @@ int main(int argc, char *argv[])
     assert(length > 0);
 
     int region = atoi(argv[3]);
-    assert(region >= 0 && region < 3);
-
-    printf("dataport name: %s, size: %d, region: %d\n", dataport_name, length, region);
+    // assert(region >= 0 && region < 3);
 
     int fd = open(dataport_name, O_RDWR);
     assert(fd >= 0);
 
     char *dataport;
     if ((dataport = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, region * getpagesize())) == (void *) -1) {
-        printf("mmap failed, errno: %d\n", errno);
+        printf("mmap failed\n");
         close(fd);
 	    return 1;
     }
 
-    // printf("%s\n", dataport);
-    for (int i = 0; i < length && dataport[i] != 0; i++) {
-        printf("%c", dataport[i]);
+    int i = 0;
+    char ch = getchar();
+    while (ch != '\n' && i < length - 1) {
+        dataport[i] = ch;
+        i++;
+	ch = getchar();
     }
-    printf("\n");
-
+    dataport[i] = 0;
+    printf("byte written: %d\n", i);
     munmap(dataport, length);
     close(fd);
 

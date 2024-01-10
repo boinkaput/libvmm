@@ -152,10 +152,23 @@ CFLAGS := -mstrict-align \
 		  -DBOARD_$(BOARD) \
 		  -DCONFIG_$(CONFIG)
 
+CFLAGS_SDDF := -I$(SDDF_SERIAL_RINGBUFFER)/include \
+		  		-I$(SDDF)/include \
+		  		-I$(SDDF)/util/include \
+		  		-I$(SDDF_SERIAL_DRIVER)/include \
+		  		-I$(SDDF)
+
+CFLAGS_USERLEVEL :=	-g3 \
+		  			-O3 \
+					-Wno-unused-command-line-argument \
+		  			-Wall -Wno-unused-function -Werror \
+		  			-I$(SDDF)/include
+
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
-all: directories driver_vm_userlevel $(IMAGE_FILE)
+# all: directories driver_vm_userlevel $(IMAGE_FILE)
+all: directories $(IMAGE_FILE)
 
 qemu: all
 	# @ivanv: check that the amount of RAM given to QEMU is at least the number of RAM that QEMU is setup with for seL4.
@@ -172,16 +185,18 @@ directories:
 
 CURRENT_DIR := $(shell pwd)
 
-DRIVER_VM_USERLEVEL_DIR := userlevel
+DRIVER_VM_USERLEVEL_TESTING_DIR := userlevel/testing
+DRIVER_VM_USERLEVEL_DRIVER_DIR := userlevel/driver
 DRIVER_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/driver_vm_rootfs
 
-DRIVER_VM_USERLEVEL_ELFS := uio_enable_irq.elf uio_ethernet.elf uio_read.elf uio_write.elf
+DRIVER_VM_USERLEVEL_TESTING_ELFS := uio_enable_irq.elf uio_ethernet.elf uio_read.elf uio_write.elf
+DRIVER_VM_USERLEVEL_DRIVER_ELFS := uio_ethernet.elf
 
 DRIVER_VM_INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 DRIVER_VM_INITRD_OVERLAYED := $(BUILD_DIR)/rootfs_overlayed.cpio.gz
 
 # Unpack rootfs, put the userlevel binary in /root, repack rootfs
-driver_vm_userlevel: $(addprefix $(BUILD_DIR)/, $(DRIVER_VM_USERLEVEL_ELFS))
+driver_vm_userlevel: $(addprefix $(BUILD_DIR)/, $(DRIVER_VM_USERLEVEL_TESTING_ELFS)) $(addprefix $(BUILD_DIR)/, $(DRIVER_VM_USERLEVEL_DRIVER_ELFS))
 	rm -r $(DRIVER_VM_ROOTFS_TMP_DIR) 2> /dev/null; \
 	mkdir -p $(DRIVER_VM_ROOTFS_TMP_DIR) && \
 	gunzip -dc $(DRIVER_VM_INITRD) | fakeroot cpio -idmv -D$(DRIVER_VM_ROOTFS_TMP_DIR) && \
@@ -214,8 +229,11 @@ $(BUILD_DIR)/package_guest_images_driver.o: $(VMM_TOOLS)/package_guest_images.S 
 					-DGUEST_INITRD_IMAGE_PATH=\"$(DRIVER_VM_INITRD_OVERLAYED)\" \
 					$< -o $@
 
-$(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_DIR)/%.c Makefile
+$(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_TESTING_DIR)/%.c Makefile
 	$(CC) $< -o $@
+
+$(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_DRIVER_DIR)/%.c Makefile
+	$(CC) $(CFLAGS_USERLEVEL) $(CFLAGS_SDDF) $< -o $@
 
 $(BUILD_DIR)/vmm_driver.elf: $(addprefix $(BUILD_DIR)/, $(VMM_DRIVER_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
