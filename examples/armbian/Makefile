@@ -65,11 +65,12 @@ CURRENT_DIR := $(shell pwd)
 ARMBIAN_VM_DIR := board/$(BOARD)/armbian_vm
 ARMBIAN_VM_DTS_DIR := $(ARMBIAN_VM_DIR)/dts
 
-ARMBIAN_VM_LINUX := $(ARMBIAN_VM_DIR)/linux
+ARMBIAN_VM_LINUX := $(ARMBIAN_VM_DIR)/linux_exp
+# ARMBIAN_VM_LINUX := $(ARMBIAN_VM_DIR)/linux
 ARMBIAN_VM_INITRD := $(ARMBIAN_VM_DIR)/initrd.cpio.gz
 ARMBIAN_VM_BASE_DTS := $(ARMBIAN_VM_DTS_DIR)/linux.dts
 ARMBIAN_VM_DTS_OVERLAYS := $(ARMBIAN_VM_DTS_DIR)/init.dts \
-								$(ARMBIAN_VM_DTS_DIR)/disable.dts \
+								$(ARMBIAN_VM_DTS_DIR)/disable.dts
 
 ARMBIAN_VM_DTB := $(BUILD_DIR)/armbian_vm.dtb
 

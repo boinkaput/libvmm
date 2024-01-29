@@ -63,7 +63,7 @@ VMM_SRC_DIR := $(VMM)/src
 SYSTEM_DESCRIPTION := board/$(BOARD)/virtio.system
 
 IMAGE_DIR := board/$(BOARD)
-LINUX := $(IMAGE_DIR)/linux
+LINUX := $(IMAGE_DIR)/linux_exp
 DTS := $(IMAGE_DIR)/linux.dts
 VMM_DTS_OVERLAY := $(IMAGE_DIR)/vmm_overlay.dts
 VMM_CLIENT_DTS_OVERLAY := $(IMAGE_DIR)/vmm_client_overlay.dts
@@ -71,6 +71,20 @@ VMM_DRIVER_DTS_OVERLAY := $(IMAGE_DIR)/vmm_driver_overlay.dts
 VMM_CLIENT_DTB := $(BUILD_DIR)/vmm_client_linux.dtb
 VMM_DRIVER_DTB := $(BUILD_DIR)/vmm_driver_linux.dtb
 INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
+
+# CURRENT_DIR := $(shell pwd)
+# SCRIPTS := $(VMM)/scripts
+
+# ARMBIAN_VM_DIR := board/$(BOARD)/armbian_vm
+# ARMBIAN_VM_DTS_DIR := $(ARMBIAN_VM_DIR)/dts
+
+# ARMBIAN_VM_LINUX := $(ARMBIAN_VM_DIR)/linux
+# ARMBIAN_VM_INITRD := $(ARMBIAN_VM_DIR)/initrd.cpio.gz
+# ARMBIAN_VM_BASE_DTS := $(ARMBIAN_VM_DTS_DIR)/linux.dts
+# ARMBIAN_VM_DTS_OVERLAYS := $(ARMBIAN_VM_DTS_DIR)/init.dts \
+# 								$(ARMBIAN_VM_DTS_DIR)/disable.dts
+
+# ARMBIAN_VM_DTB := $(BUILD_DIR)/armbian_vm.dtb
 
 SDDF := sddf
 SDDF_SERIAL_RINGBUFFER := $(SDDF)/serial/libserialsharedringbuffer
@@ -167,8 +181,8 @@ CFLAGS_USERLEVEL :=	-g3 \
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
-# all: directories driver_vm_userlevel $(IMAGE_FILE)
-all: directories $(IMAGE_FILE)
+all: directories driver_vm_userlevel $(IMAGE_FILE)
+# all: directories $(IMAGE_FILE)
 
 qemu: all
 	# @ivanv: check that the amount of RAM given to QEMU is at least the number of RAM that QEMU is setup with for seL4.
@@ -189,8 +203,8 @@ DRIVER_VM_USERLEVEL_TESTING_DIR := userlevel/testing
 DRIVER_VM_USERLEVEL_DRIVER_DIR := userlevel/driver
 DRIVER_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/driver_vm_rootfs
 
-DRIVER_VM_USERLEVEL_TESTING_ELFS := uio_enable_irq.elf uio_ethernet.elf uio_read.elf uio_write.elf
-DRIVER_VM_USERLEVEL_DRIVER_ELFS := uio_ethernet.elf
+DRIVER_VM_USERLEVEL_TESTING_ELFS := uio_enable_irq.elf libuio.elf uio_read.elf uio_write.elf
+DRIVER_VM_USERLEVEL_DRIVER_ELFS := libuio.elf
 
 DRIVER_VM_INITRD := $(IMAGE_DIR)/rootfs.cpio.gz
 DRIVER_VM_INITRD_OVERLAYED := $(BUILD_DIR)/rootfs_overlayed.cpio.gz
@@ -215,6 +229,10 @@ $(VMM_DRIVER_DTB): $(DTS) $(VMM_DRIVER_DTS_OVERLAY)
 	cat $^ > $(BUILD_DIR)/tem.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/tem.dts > $@
 
+# $(ARMBIAN_VM_DTB): $(ARMBIAN_VM_BASE_DTS) $(ARMBIAN_VM_DTS_OVERLAYS)
+# 	sh $(SCRIPTS)/dtscat $^ > $(BUILD_DIR)/armbian_vm.dts
+# 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/armbian_vm.dts > $@
+
 $(BUILD_DIR)/package_guest_images_client.o: $(VMM_TOOLS)/package_guest_images.S $(IMAGE_DIR) $(LINUX) $(INITRD) $(VMM_CLIENT_DTB)
 	$(CC) -c -g3 -x assembler-with-cpp \
 					-DGUEST_KERNEL_IMAGE_PATH=\"$(LINUX)\" \
@@ -228,6 +246,13 @@ $(BUILD_DIR)/package_guest_images_driver.o: $(VMM_TOOLS)/package_guest_images.S 
 					-DGUEST_DTB_IMAGE_PATH=\"$(VMM_DRIVER_DTB)\" \
 					-DGUEST_INITRD_IMAGE_PATH=\"$(DRIVER_VM_INITRD_OVERLAYED)\" \
 					$< -o $@
+
+# $(BUILD_DIR)/package_guest_images_driver.o: $(VMM_TOOLS)/package_guest_images.S $(ARMBIAN_VM_LINUX) $(ARMBIAN_VM_DTB) $(ARMBIAN_VM_INITRD)
+# 	$(CC) -c -g3 -x assembler-with-cpp \
+# 					-DGUEST_KERNEL_IMAGE_PATH=\"$(ARMBIAN_VM_LINUX)\" \
+# 					-DGUEST_DTB_IMAGE_PATH=\"$(ARMBIAN_VM_DTB)\" \
+# 					-DGUEST_INITRD_IMAGE_PATH=\"$(ARMBIAN_VM_INITRD)\" \
+# 					$< -o $@
 
 $(BUILD_DIR)/%.elf: $(DRIVER_VM_USERLEVEL_TESTING_DIR)/%.c Makefile
 	$(CC) $< -o $@

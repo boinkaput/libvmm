@@ -28,6 +28,8 @@
     <memory_region name="vpu" size="0x100000" phys_addr="0xff900000" />
     <memory_region name="eth0" size="0x10000" phys_addr="0xff3f0000" />
 
+    <memory_region name="uio-irq" size="0x1000"/>
+
     <!-- shared memory for ring buffer mechanism for networking -->
     <memory_region name="net_free_rx" size="0x200_000" page_size="0x200_000"/>
     <memory_region name="net_used_rx" size="0x200_000" page_size="0x200_000"/>
@@ -107,6 +109,7 @@
             <map mr="gpu" vaddr="0xffe40000" perms="rw" cached="false" />
             <map mr="vpu" vaddr="0xff900000" perms="rw" cached="false" />
             <map mr="eth0" vaddr="0xff3f0000" perms="rw" cached="false" />
+            <map mr="uio-irq" vaddr="0x30_d00_000" perms="rw" cached="true" />
 
         <map mr="net_free_rx" vaddr="0x30_e00_000" perms="rw" cached="true" />
         <map mr="net_used_rx" vaddr="0x31_000_000" perms="rw" cached="true" />
@@ -123,6 +126,9 @@
 
         <!-- mmc IRQ -->
         <irq irq="223" id="14" />
+
+        <!-- sd IRQ -->
+        <irq irq="222" id="16" />
 
         <!-- something weird -->
         <irq irq="5" id="15" />

@@ -135,6 +135,7 @@ void init(void) {
     register_passthrough_irq(96, 12);
     register_passthrough_irq(40, 13);
     register_passthrough_irq(223, 14);
+    register_passthrough_irq(222, 16);
     register_passthrough_irq(5, 15);
 #endif
 
@@ -199,6 +200,7 @@ void notified(microkit_channel ch) {
             break;
         }
         case NET_MUX_RX_CH:
+        case NET_MUX_TX_CH:
         case NET_MUX_GET_MAC_CH: {
                 bool success = virq_inject(GUEST_VCPU_ID, UIO_IRQ);
                 if (!success) {
@@ -214,7 +216,7 @@ void notified(microkit_channel ch) {
                 }
                 break;
             }
-            printf("Unexpected channel, ch: 0x%lx\n", ch);
+            LOG_VMM_ERR("Unexpected channel, ch: 0x%lx\n", ch);
     }
 }
 

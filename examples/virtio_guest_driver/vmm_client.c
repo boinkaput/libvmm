@@ -171,7 +171,7 @@ void notified(microkit_channel ch) {
         }
 
         default:
-            printf("Unexpected channel, ch: 0x%lx\n", ch);
+            LOG_VMM_ERR("Unexpected channel, ch: 0x%lx\n", ch);
     }
 }
 
