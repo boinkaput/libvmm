@@ -6,6 +6,14 @@
         .libvmm = .{
             .path = "../../"
         },
+        .linux_image = .{
+            .url = "https://trustworthy.systems/Downloads/libvmm/images/linux-v5.18-068d92ede39bf36b416507de053468332f39dbbe75cd35ebb6564614bbef08fd/Image.tar.gz"
+            .hash = "1220e1a5822c1888428e242c82480010bf112b91d5e2ed6e6e44c37762d8d366e96c"
+        }
+        .rootfs = .{
+            .url = "https://trustworthy.systems/Downloads/libvmm/images//Image.tar.gz"
+            .hash = "1220e1a5822c1888428e242c82480010bf112b91d5e2ed6e6e44c37762d8d366e96c"
+        }
     },
     .paths = .{
         "build.zig",
