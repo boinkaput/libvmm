@@ -237,7 +237,7 @@ LIBS := -lmicrokit -Tmicrokit.ld
 
 ifeq ($(BOARD), qemu_arm_virt)
 	NUM_PART = 2
-	BLK_SIZE = 512
+	LSIZE = 512
 	BLK_MEM ?= 2101248
 endif
 
@@ -262,7 +262,7 @@ directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
 $(BUILD_DIR)/storage:
-	$(VMM_TOOLS)/mkvirtdisk $@ $(NUM_PART) $(BLK_SIZE) $(BLK_MEM)
+	$(VMM_TOOLS)/mkvirtdisk $@ $(NUM_PART) $(LSIZE) $(BLK_MEM)
 
 # Unpack rootfs, put the userlevel in /root and userlevel_init in /etc/init.d/S99, repack rootfs
 $(BLK_DRIVER_VM_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL)) \
