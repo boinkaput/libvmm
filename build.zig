@@ -4,6 +4,9 @@ const src = [_][]const u8{
     "src/guest.c",
     "src/util/util.c",
     "src/util/printf.c",
+    "src/virtio/mmio.c",
+    "src/virtio/console.c",
+    "src/virtio/block.c",
 };
 
 const src_aarch64 = [_][]const u8{
@@ -82,11 +85,20 @@ pub fn build(b: *std.Build) void {
     });
 
     // @ivanv: fix all of our libvmm includes! This is a mess!
-    libvmm.addIncludePath(.{ .path = "src" });
-    libvmm.addIncludePath(.{ .path = "src/util/" });
-    libvmm.addIncludePath(.{ .path = "src/arch/aarch64" });
-    libvmm.addIncludePath(.{ .path = "src/arch/aarch64/vgic/" });
+    libvmm.addIncludePath(b.path("src"));
+    libvmm.addIncludePath(b.path("src/util/"));
+    libvmm.addIncludePath(b.path("src/arch/aarch64"));
+    libvmm.addIncludePath(b.path("src/arch/aarch64/vgic/"));
     libvmm.addIncludePath(.{ .path = libmicrokit_include });
+
+    const sddf_dep = b.dependency("sddf", .{
+        .target = target,
+        .optimize = optimize,
+        .sdk = microkit_sdk,
+        .config = @as([]const u8, microkit_config),
+        .board = @as([]const u8, microkit_board),
+    });
+    libvmm.addIncludePath(sddf_dep.path("include"));
 
     b.installArtifact(libvmm);
 }
