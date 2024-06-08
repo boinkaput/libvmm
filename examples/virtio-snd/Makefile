@@ -54,8 +54,8 @@ CLIENT_VM_DIR := board/$(BOARD)/client_vm
 CLIENT_VM_DTS_DIR := $(CLIENT_VM_DIR)/dts
 CLIENT_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_vm_rootfs
 
-SND_DRIVER_VM_LINUX := $(SND_DRIVER_VM_DIR)/linux
-SND_DRIVER_VM_INITRD := $(SND_DRIVER_VM_DIR)/rootfs.cpio.gz
+SND_DRIVER_VM_LINUX := $(SND_DRIVER_VM_DIR)/min_linux
+SND_DRIVER_VM_INITRD := $(SND_DRIVER_VM_DIR)/min_rootfs.cpio.gz
 SND_DRIVER_VM_INITRD_OVERLAYED := $(BUILD_DIR)/snd_driver_rootfs.cpio.gz
 SND_DRIVER_VM_BASE_DTS := $(SND_DRIVER_VM_DTS_DIR)/linux.dts
 SND_DRIVER_VM_DTS_OVERLAYS := $(SND_DRIVER_VM_DTS_DIR)/init.dts \
@@ -169,6 +169,13 @@ CFLAGS_USERLEVEL :=	-g \
 					$(NIX_LDFLAGS) \
 					$(NIX_CFLAGS_COMPILE)
 
+CFLAGS_USERLEVEL_INIT := -g \
+						 -Wno-unused-command-line-argument \
+		  				 -Wall -Wno-unused-function -Werror \
+						 -target aarch64-linux-musl \
+						 $(NIX_LDFLAGS) \
+						 $(NIX_CFLAGS_COMPILE)
+
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
@@ -191,14 +198,14 @@ qemu: all
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
 
-SND_DRIVER_VM_USERLEVEL_INIT := $(LINUX_SND_DIR)/sound
+SND_DRIVER_VM_USERLEVEL_INIT := snd_driver_init
 SND_DRIVER_VM_ETC := $(LINUX_SND_DIR)/board/$(BOARD)/asound.conf
 
 $(SND_DRIVER_VM_INITRD_OVERLAYED): $(addprefix $(BUILD_DIR)/, $(SND_DRIVER_VM_USERLEVEL_ELFS)) \
-								  $(SND_DRIVER_VM_USERLEVEL_INIT) \
+								  $(addprefix $(BUILD_DIR)/, $(SND_DRIVER_VM_USERLEVEL_INIT)) \
 								  $(SND_DRIVER_VM_ETC)
 	$(VMM_TOOLS)/packrootfs $(SND_DRIVER_VM_INITRD) $(SND_DRIVER_VM_ROOTFS_TMP_DIR) -o $(SND_DRIVER_VM_INITRD_OVERLAYED) \
-							--startup $(SND_DRIVER_VM_USERLEVEL_INIT) \
+							--init $(addprefix $(BUILD_DIR)/, $(SND_DRIVER_VM_USERLEVEL_INIT)) \
 							--home $(addprefix $(BUILD_DIR)/, $(SND_DRIVER_VM_USERLEVEL_ELFS)) \
 							--etc $(SND_DRIVER_VM_ETC)
 	
@@ -231,6 +238,12 @@ $(BUILD_DIR)/client_images.o: $(VMM_TOOLS)/package_guest_images.S $(CLIENT_VM_LI
 					-DGUEST_INITRD_IMAGE_PATH=\"$(CLIENT_VM_INITRD_OVERLAYED)\" \
 					-target aarch64-none-elf \
 					$< -o $@
+
+$(BUILD_DIR)/user_sound/%.o: $(LINUX_SND_DIR)/%.c
+	$(CC_USERLEVEL) -c $(CFLAGS_USERLEVEL_INIT) $< -o $@
+
+$(BUILD_DIR)/$(SND_DRIVER_VM_USERLEVEL_INIT): $(BUILD_DIR)/user_sound/snd_driver_init.o
+	$(CC_USERLEVEL) $(CFLAGS_USERLEVEL_INIT) $^ -o $@
 
 $(BUILD_DIR)/user_sound/%.o: $(UIO_DRIVERS_DIR)/snd/%.c
 	mkdir -p $(BUILD_DIR)/user_sound
