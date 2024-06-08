@@ -69,8 +69,8 @@ CLIENT_VM_2_DTS_DIR := $(CLIENT_VM_2_DIR)/dts
 CLIENT_VM_2_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_vm_2_rootfs
 
 
-BLK_DRIVER_VM_LINUX := $(BLK_DRIVER_VM_DIR)/linux
-BLK_DRIVER_VM_INITRD := $(BLK_DRIVER_VM_DIR)/rootfs.cpio.gz
+BLK_DRIVER_VM_LINUX := $(BLK_DRIVER_VM_DIR)/min_linux
+BLK_DRIVER_VM_INITRD := $(BLK_DRIVER_VM_DIR)/min_rootfs.cpio.gz
 BLK_DRIVER_VM_INITRD_MODIFIED := $(BUILD_DIR)/blk_driver_vm_rootfs.cpio.gz
 BLK_DRIVER_VM_BASE_DTS := $(BLK_DRIVER_VM_DTS_DIR)/linux.dts
 BLK_DRIVER_VM_DTS_OVERLAYS_qemu_arm_virt :=	$(BLK_DRIVER_VM_DTS_DIR)/init.dts \
@@ -124,7 +124,7 @@ ELFS := client_vmm_1.elf client_vmm_2.elf blk_driver_vmm.elf serial_virt_tx.elf 
 BLK_DRIVER_VM_USERLEVEL_qemu_arm_virt := uio_blk_driver
 BLK_DRIVER_VM_USERLEVEL_odroidc4 := uio_blk_driver
 BLK_DRIVER_VM_USERLEVEL := ${BLK_DRIVER_VM_USERLEVEL_${BOARD}}
-BLK_DRIVER_VM_USERLEVEL_INIT_qemu_arm_virt := qemu_blk_driver_init
+BLK_DRIVER_VM_USERLEVEL_INIT_qemu_arm_virt := blk_driver_init
 BLK_DRIVER_VM_USERLEVEL_INIT_odroidc4 := blk_driver_init
 BLK_DRIVER_VM_USERLEVEL_INIT := ${BLK_DRIVER_VM_USERLEVEL_INIT_${BOARD}}
 
@@ -188,6 +188,7 @@ SERIAL_VIRT_RX_OBJS := virt_rx.o sddf_printf.o sddf_putchar_debug.o
 SERIAL_DRIVER_OBJS := uart.o sddf_printf.o sddf_putchar_debug.o
 
 BLK_VIRT_OBJS := sddf_blk_virt.o sddf_cache.o sddf_blk_fsmalloc.o sddf_blk_bitarray.o sddf_blk_util.o sddf_printf.o sddf_putchar_debug.o 
+BLK_INIT_OBJS := blk_driver_init.o
 UIO_BLK_DRIVER_OBJS := blk.o libuio.o
 
 # Toolchain flags
@@ -218,7 +219,14 @@ CFLAGS_LINUX :=	-g3 \
 				-D_GNU_SOURCE \
 				-I$(SDDF_DIR)/include \
 				-I$(LINUX_DIR)/include \
-				-target aarch64-linux-gnu
+				-target aarch64-linux-musl
+
+CFLAGS_LINUX_INIT := -g3 \
+					 -O3 \
+					 -Wno-unused-command-line-argument \
+					 -Wall -Wno-unused-function -Werror \
+					 -DBOARD_$(BOARD) \
+					 -target aarch64-linux-musl
 
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
@@ -256,7 +264,7 @@ $(BUILD_DIR)/storage:
 $(BLK_DRIVER_VM_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL)) \
 								  $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL_INIT))
 	$(VMM_TOOLS)/packrootfs $(BLK_DRIVER_VM_INITRD) $(BLK_DRIVER_VM_ROOTFS_TMP_DIR) -o $(BLK_DRIVER_VM_INITRD_MODIFIED) \
-							--startup $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL_INIT)) \
+							--init $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL_INIT)) \
 							--home $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL))
 	
 $(CLIENT_VM_1_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_1_USERLEVEL)) \
@@ -367,14 +375,14 @@ $(BUILD_DIR)/postmark: $(LINUX_BLK_DIR)/postmark.c
 $(BUILD_DIR)/blk_client_init: $(LINUX_BLK_DIR)/blk_client_init
 	cp $< $@
 
-$(BUILD_DIR)/blk_driver_init: $(LINUX_BLK_DIR)/blk_driver_init
-	cp $< $@
-
 $(BUILD_DIR)/qemu_blk_client_init: $(LINUX_BLK_DIR)/qemu_blk_client_init
 	cp $< $@
 
-$(BUILD_DIR)/qemu_blk_driver_init: $(LINUX_BLK_DIR)/qemu_blk_driver_init
-	cp $< $@
+$(BUILD_DIR)/%.o: $(LINUX_BLK_DIR)/%.c Makefile
+	$(CC_USERLEVEL) -c $(CFLAGS_LINUX_INIT) $< -o $@
+
+$(BUILD_DIR)/blk_driver_init: $(addprefix $(BUILD_DIR)/, $(BLK_INIT_OBJS))
+	$(CC_USERLEVEL) $(CFLAGS_LINUX_INIT) $^ -o $@
 
 $(BUILD_DIR)/%.o: $(UIO_DIR)/%.c Makefile
 	$(CC_USERLEVEL) -c $(CFLAGS_LINUX) $< -o $@
