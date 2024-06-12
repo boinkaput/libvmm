@@ -67,6 +67,9 @@ uintptr_t serial_tx_active;
 uintptr_t serial_rx_data;
 uintptr_t serial_tx_data;
 
+bool suspended;
+size_t suspend_pc;
+
 static struct virtio_console_device virtio_console;
 
 void uio_ack(size_t vcpu_id, int irq, void *cookie)
@@ -176,6 +179,12 @@ void notified(microkit_channel ch)
 {
     bool handled = false;
 
+    if (suspended) {
+        LOG_VMM("waking\n");
+        microkit_vm_restart(GUEST_VCPU_ID, suspend_pc);
+        suspended = false;
+    }
+
     handled = virq_handle_passthrough(ch);
 
     switch (ch) {
@@ -204,8 +213,24 @@ void notified(microkit_channel ch)
  */
 void fault(microkit_id id, microkit_msginfo msginfo)
 {
-    bool success = fault_handle(id, msginfo);
+    bool wfi = false;
+    bool success = fault_handle(id, msginfo, &wfi);
     if (success) {
+        if (wfi) {
+            LOG_VMM("sleeping\n");
+            microkit_vm_stop(GUEST_VCPU_ID);
+            seL4_UserContext ctxt;
+            seL4_Error err = seL4_TCB_ReadRegisters(
+                BASE_VM_TCB_CAP + GUEST_VCPU_ID,
+                true,
+                0, /* No flags */
+                1, /* writing 1 register */
+                &ctxt
+            );
+            assert(err == seL4_NoError);
+            suspend_pc = ctxt.pc;
+            suspended = true;
+        }
         /* Now that we have handled the fault successfully, we reply to it so
          * that the guest can resume execution. */
         microkit_fault_reply(microkit_msginfo_new(0, 0));
