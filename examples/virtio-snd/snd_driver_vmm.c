@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <microkit.h>
 #include "util/util.h"
+#include "util/atomic.h"
 #include "arch/aarch64/linux.h"
 #include "arch/aarch64/fault.h"
 #include "guest.h"
@@ -185,10 +186,20 @@ void fault(microkit_id id, microkit_msginfo msginfo) {
     bool wfi = false;
     bool success = fault_handle(id, msginfo, &wfi);
     if (success) {
-        if (wfi) {
+        sound_shared_state_t sound_state = ((vm_shared_state_t *)sound_shared_state)->sound;
+        if (wfi && ATOMIC_LOAD(&sound_state.ready, __ATOMIC_ACQUIRE)) {
             LOG_VMM("sleeping\n");
             microkit_vm_stop(GUEST_VCPU_ID);
-            suspend_pc = microkit_mr_get(seL4_VMFault_IP);
+            seL4_UserContext ctxt;
+            seL4_Error err = seL4_TCB_ReadRegisters(
+                BASE_VM_TCB_CAP + GUEST_VCPU_ID,
+                true,
+                0, /* No flags */
+                1, /* writing 1 register */
+                &ctxt
+            );
+            assert(err == seL4_NoError);
+            suspend_pc = ctxt.pc;
             suspended = true;
         }
         /* Now that we have handled the fault successfully, we reply to it so
