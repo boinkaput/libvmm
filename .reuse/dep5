@@ -1,0 +1,27 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: libvmm
+Source: https://github.com/au-ts/libvmm
+
+Files:
+    build.zig.zon
+    examples/simple/build.zig.zon
+    examples/zig/build.zig.zon
+    examples/zig/src/libmicrokit.zig
+    examples/rust/aarch64-sel4-microkit.json
+Copyright: UNSW
+License: BSD-2-Clause
+
+Files:
+    */linux_config
+    */linux.dts
+    examples/*/board/*/rootfs.cpio.gz
+    examples/*/board/*/linux
+    examples/framebuffer/board/odroidc4/linux_vu7c.dts
+    examples/framebuffer/board/odroidc4/linux_with_serial.dts
+Copyright: Linux
+License: GPL-2.0-or-later
+
+Files:
+    */buildroot_config
+Copyright: Buildroot
+License: GPL-2.0-or-later

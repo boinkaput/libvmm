@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Copyright 2024, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
 # This bash script creates a virtual disk image with an msdos partition table
 
 # Usage instructions
