@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 # Snippet to build libvmm.a, to be included in a full-system Makefile.
-# Needs the variable LionsOS to point to the top of the LionsOS tree.
+# Needs the variable SDDF to point to the top of the SDDF tree for access
+# to virtio libraries
 #
 V3_BOARDS := BOARD_imx8mm_evk
 ifeq ($(filter ${MICROKIT_BOARD},${V3_BOARDS}),)
@@ -43,6 +44,7 @@ ARCH_INDEP_FILES := src/util/printf.c \
 
 CFILES := ${AARCH64_FILES} ${ARCH_INDEP_FILES}
 OBJECTS := ${CFILES:.c=.o}
+DIRECTORIES:= src/arch/aarch64/vgic src/util src/virtio
 
 # Generate dependencies automatically
 CFLAGS += -MD
@@ -55,16 +57,10 @@ CHECK_LIBVMM_CFLAGS:=.libvmm_cflags.$(shell echo ${CFLAGS}|md5sum -|sed 's/ *-$$
 	rm -f .libvmm_cflags.*
 	echo ${CFLAGS} > $@
 
-src/arch/aarch64/vgic/stamp:
-	mkdir -p src/arch/aarch64/vgic/
-	mkdir -p src/util
-	mkdir -p src/virtio
-	touch $@
-
 libvmm.a: ${OBJECTS}
 	ar rv $@ ${CFILES:.c=.o}
 
-${OBJECTS}: src/arch/aarch64/vgic/stamp ${CHECK_LIBVMM_CFLAGS}
+${OBJECTS}: ${CHECK_LIBVMM_CFLAGS} |${DIRECTORIES}
 
 -include ${CFILES:.c=.d}
 
@@ -73,3 +69,6 @@ clean::
 
 clobber:: clean
 	rm -f src/arch/aarch64/vgic/stamp
+
+${DIRECTORIES}:
+	mkdir -p $@
