@@ -7,6 +7,8 @@
 # Needs the variable SDDF to point to the top of the SDDF tree for access
 # to virtio libraries
 #
+VMM_LIBSRCDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
 V3_BOARDS := BOARD_imx8mm_evk
 ifeq ($(filter ${MICROKIT_BOARD},${V3_BOARDS}),)
 	VGIC := GIC_V2
@@ -57,6 +59,7 @@ CHECK_LIBVMM_CFLAGS:=.libvmm_cflags.$(shell echo ${CFLAGS}|md5sum -|sed 's/ *-$$
 	rm -f .libvmm_cflags.*
 	echo ${CFLAGS} > $@
 
+vpath %.c ${VMM_LIBSRCDIR}
 libvmm.a: ${OBJECTS}
 	ar rv $@ ${CFILES:.c=.o}
 
