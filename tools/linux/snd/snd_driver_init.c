@@ -78,20 +78,11 @@ int run_child(const char *program, char *const *program_args,
 }
 
 int main() {
-    // Mount proc, sysfs and devtmpfs.
-    LOG_UIO_DRIVER_INFO("Mounting proc to /proc of type proc\n");
-    int err = mount("proc", "/proc", "proc",
+    // Mount sysfs and devtmpfs.
+    LOG_UIO_DRIVER_INFO("Mounting sysfs to /sys of type sysfs\n");
+    int err = mount("sysfs", "/sys", "sysfs",
                     MS_NOSUID | MS_NOEXEC | MS_NODEV,
                     NULL);
-    if (err < 0) {
-        LOG_UIO_DRIVER_ERR("Failed to mount proc on /proc\n");
-        goto shutdown;
-    }
-
-    LOG_UIO_DRIVER_INFO("Mounting sysfs to /sys of type sysfs\n");
-    err = mount("sysfs", "/sys", "sysfs",
-                MS_NOSUID | MS_NOEXEC | MS_NODEV,
-                NULL);
     if (err < 0) {
         LOG_UIO_DRIVER_ERR("Failed to mount sysfs on /sys\n");
         goto shutdown;
