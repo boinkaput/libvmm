@@ -222,7 +222,6 @@ void notified(microkit_channel ch) {
     bool success;
 
     if (suspended) {
-        LOG_VMM("waking\n");
         microkit_vm_restart(GUEST_VCPU_ID, suspend_pc);
         suspended = false;
     }
@@ -260,10 +259,7 @@ void fault(microkit_id id, microkit_msginfo msginfo) {
     bool wfi = false;
     bool success = fault_handle(id, msginfo, &wfi);
     if (success) {
-        sound_shared_state_t sound_state = ((vm_shared_state_t *)sound_shared_state)->sound;
-        if (wfi && ATOMIC_LOAD(&sound_state.ready, __ATOMIC_ACQUIRE)) {
-            LOG_VMM("sleeping\n");
-            microkit_vm_stop(GUEST_VCPU_ID);
+        if (wfi) {
             seL4_UserContext ctxt;
             seL4_Error err = seL4_TCB_ReadRegisters(
                 BASE_VM_TCB_CAP + GUEST_VCPU_ID,
@@ -272,7 +268,10 @@ void fault(microkit_id id, microkit_msginfo msginfo) {
                 1, /* writing 1 register */
                 &ctxt
             );
-            assert(err == seL4_NoError);
+            if (err != seL4_NoError) {
+                LOG_VMM_ERR("Failed to suspend the guest on VCPU %d\n", GUEST_VCPU_ID);
+                return;
+            }
             suspend_pc = ctxt.pc;
             suspended = true;
         }
