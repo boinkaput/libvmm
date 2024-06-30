@@ -12,8 +12,8 @@
 // This queue may have many TX buffers along side commands.
 #define PCM_QUEUE_SIZE 8
 
-// 0.5 seconds
-#define LATENCY 500000
+// 0.1 seconds
+#define LATENCY 100000
 // Time between hardware interrupts
 #define PERIOD_TIME 100000
 
