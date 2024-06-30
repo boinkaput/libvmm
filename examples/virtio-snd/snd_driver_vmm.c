@@ -49,6 +49,8 @@ extern char _guest_initrd_image_end[];
 /* Microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
+bool suspended;
+
 #define SND_CLIENT_CH 4
 
 #define UIO_SND_IRQ 50
@@ -216,6 +218,15 @@ void init(void) {
 void notified(microkit_channel ch) {
     bool success;
 
+    if (suspended) {
+        seL4_Error err = seL4_TCB_Resume(BASE_VM_TCB_CAP + GUEST_VCPU_ID);
+        if (err != seL4_NoError) {
+            LOG_VMM_ERR("failed to resume guest on VCPU %d\n", GUEST_VCPU_ID);
+            microkit_internal_crash(err);
+        }
+        suspended = false;
+    }
+
     switch (ch) {
     case SERIAL_RX_CH:
         /* We have received an event from the serial multiplexer, so we
@@ -246,7 +257,7 @@ void notified(microkit_channel ch) {
  * the VMM to handle.
  */
 void fault(microkit_id id, microkit_msginfo msginfo) {
-    bool success = fault_handle(id, msginfo);
+    bool success = fault_handle(id, msginfo, &suspended);
     if (success) {
         /* Now that we have handled the fault successfully, we reply to it so
          * that the guest can resume execution. */

@@ -39,6 +39,8 @@ extern char _guest_initrd_image_end[];
 /* Microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
+bool suspended;
+
 /* sDDF block */
 #define BLOCK_CH 1
 #if defined(BOARD_odroidc4)
@@ -175,6 +177,15 @@ void notified(microkit_channel ch)
 {
     bool handled = false;
 
+    if (suspended) {
+        seL4_Error err = seL4_TCB_Resume(BASE_VM_TCB_CAP + GUEST_VCPU_ID);
+        if (err != seL4_NoError) {
+            LOG_VMM_ERR("failed to resume guest on VCPU %d\n", GUEST_VCPU_ID);
+            microkit_internal_crash(err);
+        }
+        suspended = false;
+    }
+
     handled = virq_handle_passthrough(ch);
 
     switch (ch) {
@@ -203,7 +214,7 @@ void notified(microkit_channel ch)
  */
 void fault(microkit_id id, microkit_msginfo msginfo)
 {
-    bool success = fault_handle(id, msginfo);
+    bool success = fault_handle(id, msginfo, &suspended);
     if (success) {
         /* Now that we have handled the fault successfully, we reply to it so
          * that the guest can resume execution. */
