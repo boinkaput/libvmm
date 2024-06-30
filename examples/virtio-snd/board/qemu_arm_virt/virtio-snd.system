@@ -112,7 +112,7 @@
 
     </protection_domain>
 
-    <protection_domain name="SND_DRIVER_VMM" priority="110" budget="400" period="2000">
+    <protection_domain name="SND_DRIVER_VMM" priority="110">
         <program_image path="snd_driver_vmm.elf" />
         <map mr="snd_driver_vm_ram" vaddr="0x40000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
 
@@ -127,7 +127,7 @@
         <setvar symbol="sound_data_paddr" region_paddr="snd_data" />
         <map mr="snd_shared" vaddr="0x12_000_000" perms="rw" cached="false" setvar_vaddr="sound_shared_state" />
 
-        <virtual_machine name="snd_linux" id="0" priority="110">
+        <virtual_machine name="snd_linux" id="0" priority="105">
             <map mr="snd_driver_vm_ram" vaddr="0x40000000" perms="rwx" />
             <map mr="gic_vcpu" vaddr="0x8010000" perms="rw" cached="false" />
 
