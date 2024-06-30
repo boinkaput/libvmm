@@ -106,7 +106,7 @@ int main() {
 
     // Create a new process for the uio driver and wait for it to finish.
     char *uio_driver_args[] = UIO_DRIVER_PROGRAM_ARGS;
-    run_child(UIO_DRIVER_PROGRAM_PATH, uio_driver_args, execv);
+    run_child(UIO_DRIVER_PROGRAM_PATH, uio_driver_args, uio_snd_driver);
 
 shutdown:
     sync();
