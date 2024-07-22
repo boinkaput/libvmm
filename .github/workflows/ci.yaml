@@ -1,7 +1,5 @@
 name: CI
 
-# @ivanv: TODO, should minisign Zig downloads
-
 on:
   pull_request:
   push:
@@ -43,9 +41,9 @@ jobs:
         run: sudo apt update && sudo apt install -y make clang lld llvm qemu-system-arm device-tree-compiler expect gcc-aarch64-linux-gnu
       - name: Install Zig
         run: |
-          wget https://ziglang.org/builds/zig-linux-x86_64-0.12.0-dev.3434+e90583f5d.tar.xz
-          tar xf zig-linux-x86_64-0.12.0-dev.3434+e90583f5d.tar.xz
-          echo "${PWD}/zig-linux-x86_64-0.12.0-dev.3434+e90583f5d/:$PATH" >> $GITHUB_PATH
+          wget https://ziglang.org/builds/zig-linux-x86_64-0.13.0.tar.xz
+          tar xf zig-linux-x86_64-0.13.0.tar.xz
+          echo "${PWD}/zig-linux-x86_64-0.13.0/:$PATH" >> $GITHUB_PATH
       - name: Install Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - name: Build and run examples
@@ -76,9 +74,9 @@ jobs:
           echo "/usr/local/opt/llvm/bin:$PATH" >> $GITHUB_PATH
       - name: Install Zig
         run: |
-          wget https://ziglang.org/builds/zig-macos-x86_64-0.12.0-dev.3434+e90583f5d.tar.xz
-          tar xf zig-macos-x86_64-0.12.0-dev.3434+e90583f5d.tar.xz
-          echo "${PWD}/zig-macos-x86_64-0.12.0-dev.3434+e90583f5d/:$PATH" >> $GITHUB_PATH
+          wget https://ziglang.org/builds/zig-macos-x86_64-0.13.0.tar.xz
+          tar xf zig-macos-x86_64-0.13.0.tar.xz
+          echo "${PWD}/zig-macos-x86_64-0.13.0/:$PATH" >> $GITHUB_PATH
       - name: Install Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - name: Build and run examples
@@ -106,7 +104,7 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Build and run examples
-        run: nix-shell --pure --run "./ci/examples.sh ${PWD}/microkit-sdk-1.2.6"
+        run: nix-shell --run "./ci/examples.sh ${PWD}/microkit-sdk-1.2.6"
       - name: Upload built system images
         uses: actions/upload-artifact@v4
         with:

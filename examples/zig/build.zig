@@ -35,29 +35,30 @@ pub fn build(b: *std.Build) void {
     const microkit_tool = b.fmt("{s}/bin/microkit", .{ microkit_sdk });
     const libmicrokit = b.fmt("{s}/lib/libmicrokit.a", .{ microkit_board_dir });
     const libmicrokit_linker_script = b.fmt("{s}/lib/microkit.ld", .{ microkit_board_dir });
-    const sdk_board_include_dir = b.fmt("{s}/include", .{ microkit_board_dir });
+    const libmicrokit_include = b.fmt("{s}/include", .{ microkit_board_dir });
 
     const zig_libmicrokit = b.addObject(.{
         .name = "zig_libmicrokit",
         .target = target,
         .optimize = optimize,
     });
-    zig_libmicrokit.addCSourceFile(.{ .file = .{ .path = "src/libmicrokit.c" }, .flags = &.{} });
-    zig_libmicrokit.addIncludePath(.{ .path = "src/" });
-    zig_libmicrokit.addIncludePath(.{ .path = sdk_board_include_dir });
+    zig_libmicrokit.addCSourceFile(.{ .file = b.path("src/libmicrokit.c"), .flags = &.{} });
+    zig_libmicrokit.addIncludePath(b.path("src/"));
+    zig_libmicrokit.addIncludePath(.{ .cwd_relative = libmicrokit_include });
 
     const libvmm_dep = b.dependency("libvmm", .{
         .target = target,
         .optimize = optimize,
-        .sdk = microkit_sdk,
-        .config = @as([]const u8, microkit_config),
-        .board = @as([]const u8, microkit_board),
+        .libmicrokit_include = @as([]const u8, libmicrokit_include),
+        // Because we only support QEMU ARM virt, vGIC version is 2.
+        .arm_vgic_version = @as(usize, 2),
+        .microkit_board = @as([]const u8, microkit_board),
     });
     const libvmm = libvmm_dep.artifact("vmm");
 
     const exe = b.addExecutable(.{
         .name = "vmm.elf",
-        .root_source_file = .{ .path = "src/vmm.zig" },
+        .root_source_file = b.path("src/vmm.zig"),
         .target = target,
         .optimize = optimize,
         // Microkit expects and requires the symbol table to exist in the ELF,
@@ -70,29 +71,26 @@ pub fn build(b: *std.Build) void {
     const dtc_cmd = b.addSystemCommand(&[_][]const u8{
         "dtc", "-q", "-I", "dts", "-O", "dtb"
     });
-    dtc_cmd.addFileArg(.{ .path = "images/linux.dts" });
+    dtc_cmd.addFileArg(b.path("images/linux.dts"));
     const dtb = dtc_cmd.captureStdOut();
     // When we embed these artifacts into our VMM code, we use @embedFile provided by
     // the Zig compiler. However, we can't just include any path outside of the 'src/'
     // directory and so we add each file as a "module".
     exe.root_module.addAnonymousImport("dtb", .{ .root_source_file = dtb });
-    exe.root_module.addAnonymousImport("linux", .{ .root_source_file = .{ .path = "images/linux" } });
-    exe.root_module.addAnonymousImport("rootfs", .{ .root_source_file = .{ .path = "images/rootfs.cpio.gz" } });
+    exe.root_module.addAnonymousImport("linux", .{ .root_source_file = b.path("images/linux") });
+    exe.root_module.addAnonymousImport("rootfs", .{ .root_source_file = b.path("images/rootfs.cpio.gz") });
 
+    exe.addIncludePath(b.path("src/"));
     // Add microkit.h to be used by the API wrapper.
-    exe.addIncludePath(.{ .path = sdk_board_include_dir });
-    exe.addIncludePath(libvmm_dep.path("src"));
-    // @ivanv: shouldn't need to do this! fix our includes
-    exe.addIncludePath(libvmm_dep.path("src/arch/aarch64"));
+    exe.addIncludePath(.{ .cwd_relative = libmicrokit_include });
     // Add the static library that provides each protection domain's entry
     // point (`main()`), which runs the main handler loop.
-    exe.addObjectFile(.{ .path = libmicrokit });
-    exe.linkLibrary(libvmm);
+    exe.addObjectFile(.{ .cwd_relative = libmicrokit });
     exe.addObject(zig_libmicrokit);
     // Specify the linker script, this is necessary to set the ELF entry point address.
-    exe.setLinkerScriptPath(.{ .path = libmicrokit_linker_script });
+    exe.setLinkerScriptPath(.{ .cwd_relative = libmicrokit_linker_script });
 
-    exe.addIncludePath(.{ .path = "src/" });
+    exe.linkLibrary(libvmm);
 
     b.installArtifact(exe);
 
@@ -113,7 +111,7 @@ pub fn build(b: *std.Build) void {
        b.getInstallPath(.prefix, "./report.txt")
     });
     microkit_tool_cmd.step.dependOn(b.getInstallStep());
-    // Add the "microkit" step, and make it the default step when we execute `zig build`>
+    // Add the "microkit" step, and make it the default step when we execute `zig build`
     const microkit_step = b.step("microkit", "Compile and build the final bootable image");
     microkit_step.dependOn(&microkit_tool_cmd.step);
     b.default_step = microkit_step;

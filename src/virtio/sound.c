@@ -1,9 +1,9 @@
-#include "sound.h"
-#include "config.h"
-#include "microkit.h"
-#include "virq.h"
-#include "virtio/mmio.h"
-#include "virtio/virtq.h"
+#include <microkit.h>
+#include <libvmm/virq.h>
+#include <libvmm/virtio/sound.h>
+#include <libvmm/virtio/config.h>
+#include <libvmm/virtio/mmio.h>
+#include <libvmm/virtio/virtq.h>
 #include <sddf/sound/queue.h>
 
 // #define DEBUG_SOUND
@@ -33,7 +33,7 @@ static void virtio_snd_mmio_reset(struct virtio_device *dev)
     LOG_SOUND("Resetting virtIO sound device\n");
 
     for (int i = 0; i < VIRTIO_SND_NUM_VIRTQ; i++) {
-        dev->vqs[i].ready = 0;
+        dev->vqs[i].ready = false;
         dev->vqs[i].last_idx = 0;
     }
 }

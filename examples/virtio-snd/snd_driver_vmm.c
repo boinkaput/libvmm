@@ -6,16 +6,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <microkit.h>
-#include "util/util.h"
-#include "util/atomic.h"
-#include "arch/aarch64/linux.h"
-#include "arch/aarch64/fault.h"
-#include "guest.h"
-#include "fault.h"
-#include "virq.h"
-#include "tcb.h"
-#include "vcpu.h"
-#include "virtio/console.h"
+#include <libvmm/guest.h>
+#include <libvmm/virq.h>
+#include <libvmm/util/util.h>
+#include <libvmm/virtio/virtio.h>
+#include <libvmm/arch/aarch64/linux.h>
+#include <libvmm/arch/aarch64/fault.h>
+#include <sddf/serial/queue.h>
+#include <serial_config.h>
 #include <sddf/sound/queue.h>
 #include <sddf/util/cache.h>
 #include <uio/sound.h>
@@ -49,18 +47,33 @@ extern char _guest_initrd_image_end[];
 /* Microkit will set this variable to the start of the guest RAM memory region. */
 uintptr_t guest_ram_vaddr;
 
-#define SND_CLIENT_CH 4
+#define SND_CLIENT_CH 2
 
 #define UIO_SND_IRQ 50
 
 #define MAX_IRQ_CH 63
 int passthrough_irq_map[MAX_IRQ_CH];
 
+#define SERIAL_TX_CH 0
+#define SERIAL_RX_CH 1
+
+#define VIRTIO_CONSOLE_IRQ (74)
+#define VIRTIO_CONSOLE_BASE (0x130000)
+#define VIRTIO_CONSOLE_SIZE (0x1000)
+
+serial_queue_t *serial_rx_queue;
+serial_queue_t *serial_tx_queue;
+
+char *serial_rx_data;
+char *serial_tx_data;
+
+uintptr_t sound_shared_state;
+uintptr_t sound_data_paddr;
+
 bool suspended;
 size_t suspend_pc;
 
-uintptr_t sound_shared_state; 
-uintptr_t sound_data_paddr; 
+static struct virtio_console_device virtio_console;
 
 static void passthrough_device_ack(size_t vcpu_id, int irq, void *cookie) {
     microkit_channel irq_ch = (microkit_channel)(int64_t)cookie;
@@ -120,6 +133,24 @@ void init(void) {
         return;
     }
 
+    assert(serial_rx_data);
+    assert(serial_tx_data);
+    assert(serial_rx_queue);
+    assert(serial_tx_queue);
+
+    /* Initialise our sDDF ring buffers for the serial device */
+    serial_queue_handle_t serial_rxq, serial_txq;
+    serial_cli_queue_init_sys(microkit_name, &serial_rxq, serial_rx_queue, serial_rx_data, &serial_txq, serial_tx_queue, serial_tx_data);
+
+    /* Initialise virtIO console device */
+    success = virtio_mmio_console_init(&virtio_console,
+                                  VIRTIO_CONSOLE_BASE,
+                                  VIRTIO_CONSOLE_SIZE,
+                                  VIRTIO_CONSOLE_IRQ,
+                                  &serial_rxq, &serial_txq,
+                                  SERIAL_TX_CH);
+    assert(success);
+
     success = virq_register(GUEST_VCPU_ID, UIO_SND_IRQ, &uio_sound_virq_ack, NULL);
     assert(success);
 
@@ -142,9 +173,7 @@ void init(void) {
     uintptr_t *data_paddr = &((vm_shared_state_t *)sound_shared_state)->data_paddr;
     *data_paddr = sound_data_paddr;
     cache_clean((uintptr_t)data_paddr, sizeof(uintptr_t));
-    
-    suspended = false;
-    suspend_pc = 0;
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
@@ -158,6 +187,11 @@ void notified(microkit_channel ch) {
     }
 
     switch (ch) {
+    case SERIAL_RX_CH:
+        /* We have received an event from the serial virtualiser, so we
+            * call the virtIO console handling */
+        virtio_console_handle_rx(&virtio_console);
+        break;
     case SND_CLIENT_CH:
         success = virq_inject(GUEST_VCPU_ID, UIO_SND_IRQ);
         if (!success) {
@@ -185,22 +219,22 @@ void fault(microkit_id id, microkit_msginfo msginfo) {
     bool wfi = false;
     bool success = fault_handle(id, msginfo, &wfi);
     if (success) {
-        if (wfi) {
-            seL4_UserContext ctxt;
-            seL4_Error err = seL4_TCB_ReadRegisters(
-                BASE_VM_TCB_CAP + GUEST_VCPU_ID,
-                true,
-                0, /* No flags */
-                1, /* writing 1 register */
-                &ctxt
-            );
-            if (err != seL4_NoError) {
-                LOG_VMM_ERR("Failed to suspend the guest on VCPU %d\n", GUEST_VCPU_ID);
-                return;
-            }
-            suspend_pc = ctxt.pc;
-            suspended = true;
-        }
+        // if (wfi) {
+        //     seL4_UserContext ctxt;
+        //     seL4_Error err = seL4_TCB_ReadRegisters(
+        //         BASE_VM_TCB_CAP + GUEST_VCPU_ID,
+        //         true,
+        //         0, /* No flags */
+        //         1, /* writing 1 register */
+        //         &ctxt
+        //     );
+        //     if (err != seL4_NoError) {
+        //         LOG_VMM_ERR("Failed to suspend the guest on VCPU %d\n", GUEST_VCPU_ID);
+        //         return;
+        //     }
+        //     suspend_pc = ctxt.pc;
+        //     suspended = true;
+        // }
         /* Now that we have handled the fault successfully, we reply to it so
          * that the guest can resume execution. */
         microkit_fault_reply(microkit_msginfo_new(0, 0));

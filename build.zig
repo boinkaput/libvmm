@@ -6,9 +6,16 @@ const src = [_][]const u8{
     "src/util/printf.c",
 };
 
+const src_aarch64_vgic_v2 = [_][]const u8{
+    "src/arch/aarch64/vgic/vgic_v2.c",
+};
+
+const src_aarch64_vgic_v3 = [_][]const u8{
+    "src/arch/aarch64/vgic/vgic_v3.c",
+};
+
 const src_aarch64 = [_][]const u8{
     "src/arch/aarch64/vgic/vgic.c",
-    "src/arch/aarch64/vgic/vgic_v2.c",
     "src/arch/aarch64/fault.c",
     "src/arch/aarch64/psci.c",
     "src/arch/aarch64/smc.c",
@@ -22,39 +29,13 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
 
-    // Getting the path to the Microkit SDK before doing anything else
-    const microkit_sdk_arg = b.option([]const u8, "sdk", "Path to Microkit SDK");
-    if (microkit_sdk_arg == null) {
-        std.log.err("Missing -Dsdk=/path/to/sdk argument being passed\n", .{});
-        std.posix.exit(1);
-    }
-    const microkit_sdk = microkit_sdk_arg.?;
-    std.fs.cwd().access(microkit_sdk, .{}) catch |err| {
-        switch (err) {
-            error.FileNotFound => std.log.err("Path to SDK '{s}' does not exist\n", .{ microkit_sdk }),
-            else => std.log.err("Could not acccess SDK path '{s}', error is {any}\n", .{ microkit_sdk, err })
-        }
-        std.posix.exit(1);
-    };
+    const libmicrokit_include_opt = b.option([]const u8, "libmicrokit_include", "Path to the libmicrokit include directory") orelse null;
+    const microkit_board_opt = b.option([]const u8, "microkit_board", "Name of Microkit board") orelse null;
 
-    const microkit_config = b.option([]const u8, "config", "Microkit config to build for") orelse "debug";
-    const microkit_board_arg = b.option([]const u8, "board", "Microkit board to target");
+    // Default to vGIC version 2
+    const arm_vgic_version = b.option(usize, "arm_vgic_version", "ARM vGIC version to emulate") orelse null;
 
-    if (microkit_board_arg == null) {
-        std.log.err("Missing -Dboard=<BOARD> argument being passed\n", .{});
-        std.posix.exit(1);
-    }
-    const microkit_board = microkit_board_arg.?;
-
-    const microkit_board_dir = b.fmt("{s}/board/{s}/{s}", .{ microkit_sdk, microkit_board, microkit_config });
-    std.fs.cwd().access(microkit_board_dir, .{}) catch |err| {
-        switch (err) {
-            error.FileNotFound => std.log.err("Path to '{s}' does not exist\n", .{ microkit_board_dir }),
-            else => std.log.err("Could not acccess path '{s}', error is {any}\n", .{ microkit_board_dir, err })
-        }
-        std.posix.exit(1);
-    };
-    const libmicrokit_include = b.fmt("{s}/include", .{ microkit_board_dir });
+    const libmicrokit_include = libmicrokit_include_opt.?;
 
     const libvmm = b.addStaticLibrary(.{
         .name = "vmm",
@@ -63,7 +44,15 @@ pub fn build(b: *std.Build) void {
     });
 
     const src_arch = switch (target.result.cpu.arch) {
-        .aarch64 => src_aarch64,
+        .aarch64 => blk: {
+            const vgic_src = switch (arm_vgic_version.?) {
+                2 => src_aarch64_vgic_v2,
+                3 => src_aarch64_vgic_v3,
+                else => @panic("Unsupported vGIC version given"),
+            };
+
+            break :blk src_aarch64 ++ vgic_src;
+        },
         else => {
             std.log.err("Unsupported libvmm architecture given '{s}'", .{ @tagName(target.result.cpu.arch) });
             std.posix.exit(1);
@@ -77,16 +66,14 @@ pub fn build(b: *std.Build) void {
             "-Wno-unused-function",
             "-mstrict-align",
             "-fno-sanitize=undefined", // @ivanv: ideally we wouldn't have to turn off UBSAN
-            b.fmt("-DBOARD_{s}", .{ microkit_board }) // @ivanv: shouldn't be needed as the library should not depend on the board
+            b.fmt("-DBOARD_{s}", .{ microkit_board_opt.? }) // @ivanv: shouldn't be needed as the library should not depend on the board
         }
     });
 
-    // @ivanv: fix all of our libvmm includes! This is a mess!
-    libvmm.addIncludePath(.{ .path = "src" });
-    libvmm.addIncludePath(.{ .path = "src/util/" });
-    libvmm.addIncludePath(.{ .path = "src/arch/aarch64" });
-    libvmm.addIncludePath(.{ .path = "src/arch/aarch64/vgic/" });
-    libvmm.addIncludePath(.{ .path = libmicrokit_include });
+    libvmm.addIncludePath(b.path("include"));
+    libvmm.addIncludePath(.{ .cwd_relative = libmicrokit_include });
+
+    libvmm.installHeadersDirectory(b.path("include/libvmm"), "libvmm", .{});
 
     b.installArtifact(libvmm);
 }

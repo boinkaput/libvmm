@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <microkit.h>
+#include <serial_config.h>
 #include <sel4/benchmark_track_types.h>
 #include <sel4/benchmark_utilisation_types.h>
 #include <sddf/benchmark/bench.h>
@@ -16,17 +17,21 @@
 #define LOG_BUFFER_CAP 7
 
 /* Notification channels and TCB CAP offsets - ensure these align with .system file! */
+#define SERIAL_TX_CH 0
 #define START 1
 #define STOP 2
 #define INIT 3
 
 #define PD_TOTAL        0
-#define PD_CLIENT_ID    1
+#define PD_SND_DRV_ID   1
 #define PD_VIRT_ID      2
-#define PD_SND_DRV_ID   3
+#define PD_CLIENT_ID    3
 
-uintptr_t uart_base;
 uintptr_t cyclecounters_vaddr;
+
+serial_queue_t *serial_tx_queue;
+char *serial_tx_data;
+serial_queue_handle_t tx_queue_handle;
 
 static ccnt_t counter_values[8];
 static counter_bitfield_t benchmark_bf;
@@ -42,13 +47,6 @@ static char *counter_names[] = {
     "L1 d-tlb misses",
     "Instructions",
     "Branch mispredictions",
-};
-
-#define PD_ID_COUNT 3
-static int pd_ids[PD_ID_COUNT] = {
-    PD_CLIENT_ID,
-    PD_VIRT_ID,
-    PD_SND_DRV_ID
 };
 
 static uint64_t start_cycles; 
@@ -67,9 +65,9 @@ static event_id_t benchmarking_events[] = {
 static void microkit_benchmark_start(void)
 {
     seL4_BenchmarkResetThreadUtilisation(TCB_CAP);
-    seL4_BenchmarkResetThreadUtilisation(BASE_TCB_CAP + PD_CLIENT_ID);
-    seL4_BenchmarkResetThreadUtilisation(BASE_TCB_CAP + PD_VIRT_ID);
     seL4_BenchmarkResetThreadUtilisation(BASE_TCB_CAP + PD_SND_DRV_ID);
+    seL4_BenchmarkResetThreadUtilisation(BASE_TCB_CAP + PD_VIRT_ID);
+    seL4_BenchmarkResetThreadUtilisation(BASE_TCB_CAP + PD_CLIENT_ID);
     seL4_BenchmarkResetLog();
 }
 
@@ -105,9 +103,9 @@ static void print_benchmark_details(uint64_t pd_id, uint64_t kernel_util, uint64
     case PD_VIRT_ID: sddf_printf("PD_VIRT_ID"); break;
     case PD_SND_DRV_ID: sddf_printf("PD_SND_DRV_ID"); break;
     }
-    if (pd_id != PD_TOTAL) sddf_printf(" ( %llx)", pd_id);
-    sddf_printf("\r\n{\r\nKernelUtilisation:  %llu\r\nKernelEntries:  %llu\r\nNumberSchedules:  %llu\r\nTotalUtilisation:  %llu\r\n}\r\n", 
-            kernel_util, kernel_entries, number_schedules, total_util);
+    if (pd_id != PD_TOTAL) sddf_printf(" ( %lx)", pd_id);
+    sddf_printf("{\nKernelUtilisation:  %lx\nKernelEntries:  %lx\nNumberSchedules:  %lx\nTotalUtilisation:  %lx\n}\n",
+                kernel_util, kernel_entries, number_schedules, total_util);
 }
 #endif
 
@@ -227,6 +225,9 @@ void notified(microkit_channel ch)
 
 void init(void)
 {
+    serial_cli_queue_init_sys(microkit_name, NULL, NULL, NULL, &tx_queue_handle, serial_tx_queue, serial_tx_data);
+    serial_putchar_init(SERIAL_TX_CH, &tx_queue_handle);
+
     sel4bench_init();
     seL4_Word n_counters = sel4bench_get_num_counters();
 

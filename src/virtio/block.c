@@ -1,13 +1,15 @@
 #include <microkit.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "sddf/blk/queue.h"
-#include "virtio/config.h"
-#include "virtio/virtq.h"
-#include "virtio/mmio.h"
-#include "virtio/block.h"
-#include "virq.h"
-#include "util.h"
+#include <libvmm/virq.h>
+#include <libvmm/util/util.h>
+#include <libvmm/virtio/config.h>
+#include <libvmm/virtio/virtq.h>
+#include <libvmm/virtio/mmio.h>
+#include <libvmm/virtio/block.h>
+#include <sddf/blk/queue.h>
+#include <sddf/util/fsmalloc.h>
+#include <sddf/util/ialloc.h>
 
 /* Uncomment this to enable debug logging */
 // #define DEBUG_BLOCK
@@ -27,7 +29,7 @@ static inline struct virtio_blk_device *device_state(struct virtio_device *dev)
 
 static void virtio_blk_mmio_reset(struct virtio_device *dev)
 {
-    dev->vqs[VIRTIO_BLK_DEFAULT_VIRTQ].ready = 0;
+    dev->vqs[VIRTIO_BLK_DEFAULT_VIRTQ].ready = false;
     dev->vqs[VIRTIO_BLK_DEFAULT_VIRTQ].last_idx = 0;
 }
 
@@ -244,7 +246,8 @@ static int virtio_blk_mmio_queue_notify(struct virtio_device *dev)
                 virtio_data, virtio_data_size, 0
             };
 
-            err = blk_enqueue_req(&state->queue_h, READ_BLOCKS, sddf_data, sddf_block_number, sddf_count, req_id);
+            uintptr_t offset = sddf_data - ((struct virtio_blk_device *)dev->device_data)->data_region;
+            err = blk_enqueue_req(&state->queue_h, READ_BLOCKS, offset, sddf_block_number, sddf_count, req_id);
             assert(!err);
             break;
         }
@@ -289,7 +292,8 @@ static int virtio_blk_mmio_queue_notify(struct virtio_device *dev)
                     virtio_data, virtio_data_size, aligned
                 };
 
-                err = blk_enqueue_req(&state->queue_h, READ_BLOCKS, sddf_data, sddf_block_number, sddf_count, req_id);
+                uintptr_t offset = sddf_data - ((struct virtio_blk_device *)dev->device_data)->data_region;
+                err = blk_enqueue_req(&state->queue_h, READ_BLOCKS, offset, sddf_block_number, sddf_count, req_id);
                 assert(!err);
             } else {
                 if (!sddf_make_req_check(state, sddf_count)) {
@@ -316,7 +320,9 @@ static int virtio_blk_mmio_queue_notify(struct virtio_device *dev)
 
                 /* Copy data from virtio buffer to data buffer, create sddf write request and initialise it with data buffer */
                 memcpy((void *)sddf_data, (void *)virtq->desc[curr_desc_head].addr, virtq->desc[curr_desc_head].len);
-                err = blk_enqueue_req(&state->queue_h, WRITE_BLOCKS, sddf_data, sddf_block_number, sddf_count, req_id);
+
+                uintptr_t offset = sddf_data - ((struct virtio_blk_device *)dev->device_data)->data_region;
+                err = blk_enqueue_req(&state->queue_h, WRITE_BLOCKS, offset, sddf_block_number, sddf_count, req_id);
                 assert(!err);
             }
             break;
@@ -424,7 +430,7 @@ bool virtio_blk_handle_resp(struct virtio_blk_device *state)
 
                     err = blk_enqueue_req(&state->queue_h,
                                           WRITE_BLOCKS,
-                                          data->sddf_data,
+                                          data->sddf_data - state->data_region,
                                           data->sddf_block_number,
                                           data->sddf_count,
                                           new_sddf_id);
@@ -479,7 +485,7 @@ static void virtio_blk_config_init(struct virtio_blk_device *blk_dev)
 {
     blk_storage_info_t *storage_info = blk_dev->storage_info;
 
-    blk_dev->config.capacity = (BLK_TRANSFER_SIZE / VIRTIO_BLK_SECTOR_SIZE) * storage_info->size;
+    blk_dev->config.capacity = (BLK_TRANSFER_SIZE / VIRTIO_BLK_SECTOR_SIZE) * storage_info->capacity;
     if (storage_info->block_size != 0) {
         blk_dev->config.blk_size = storage_info->block_size * BLK_TRANSFER_SIZE;
     } else {
@@ -518,6 +524,7 @@ bool virtio_mmio_blk_init(struct virtio_blk_device *blk_dev,
 
     blk_dev->storage_info = storage_info;
     blk_dev->queue_h = *queue_h;
+    blk_dev->data_region = data_region;
     blk_dev->server_ch = server_ch;
 
     size_t sddf_data_buffers = data_region_size / BLK_TRANSFER_SIZE;

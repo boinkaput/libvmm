@@ -15,8 +15,8 @@ build_simple_make() {
     mkdir -p ${BUILD_DIR}
     make -C examples/simple -B \
         BUILD_DIR=${BUILD_DIR} \
-        CONFIG=${CONFIG} \
-        BOARD=${BOARD} \
+        MICROKIT_CONFIG=${CONFIG} \
+        MICROKIT_BOARD=${BOARD} \
         MICROKIT_SDK=${SDK_PATH}
 }
 
@@ -119,6 +119,12 @@ build_simple_make "odroidc4" "release"
 
 build_simple_zig "odroidc4" "debug"
 build_simple_zig "odroidc4" "release"
+
+build_simple_make "maaxboard" "debug"
+build_simple_make "maaxboard" "release"
+
+build_simple_zig "maaxboard" "debug"
+build_simple_zig "maaxboard" "release"
 
 build_rust "debug"
 simulate_rust "debug"

@@ -2,18 +2,19 @@ const std = @import("std");
 
 const MicrokitBoard = enum {
     qemu_arm_virt,
-    odroidc4
+    odroidc4,
+    maaxboard,
 };
 
 const Target = struct {
     board: MicrokitBoard,
-    zig_target: std.zig.CrossTarget,
+    zig_target: std.Target.Query,
 };
 
 const targets = [_]Target {
     .{
         .board = MicrokitBoard.qemu_arm_virt,
-        .zig_target = std.zig.CrossTarget{
+        .zig_target = std.Target.Query{
             .cpu_arch = .aarch64,
             .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_a53 },
             .os_tag = .freestanding,
@@ -22,16 +23,25 @@ const targets = [_]Target {
     },
     .{
         .board = MicrokitBoard.odroidc4,
-        .zig_target = std.zig.CrossTarget{
+        .zig_target = std.Target.Query{
             .cpu_arch = .aarch64,
             .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_a55 },
             .os_tag = .freestanding,
             .abi = .none,
         },
-    }
+    },
+    .{
+        .board = MicrokitBoard.maaxboard,
+        .zig_target = std.Target.Query{
+            .cpu_arch = .aarch64,
+            .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_a53 },
+            .os_tag = .freestanding,
+            .abi = .none,
+        },
+    },
 };
 
-fn findTarget(board: MicrokitBoard) std.zig.CrossTarget {
+fn findTarget(board: MicrokitBoard) std.Target.Query {
     for (targets) |target| {
         if (board == target.board) {
             return target.zig_target;
@@ -78,14 +88,19 @@ pub fn build(b: *std.Build) void {
     const microkit_tool = b.fmt("{s}/bin/microkit", .{ microkit_sdk });
     const libmicrokit = b.fmt("{s}/lib/libmicrokit.a", .{ microkit_board_dir });
     const libmicrokit_linker_script = b.fmt("{s}/lib/microkit.ld", .{ microkit_board_dir });
-    const sdk_board_include_dir = b.fmt("{s}/include", .{ microkit_board_dir });
+    const libmicrokit_include = b.fmt("{s}/include", .{ microkit_board_dir });
+
+    const arm_vgic_version: usize = switch (microkit_board_option.?) {
+        .qemu_arm_virt, .odroidc4 => 2,
+        .maaxboard => 3,
+    };
 
     const libvmm_dep = b.dependency("libvmm", .{
         .target = target,
         .optimize = optimize,
-        .sdk = microkit_sdk,
-        .config = @as([]const u8, microkit_config),
-        .board = @as([]const u8, microkit_board),
+        .libmicrokit_include = @as([]const u8, libmicrokit_include),
+        .arm_vgic_version = arm_vgic_version,
+        .microkit_board = @as([]const u8, microkit_board),
     });
     const libvmm = libvmm_dep.artifact("vmm");
 
@@ -99,25 +114,31 @@ pub fn build(b: *std.Build) void {
         .strip = false,
     });
 
+    const base_dts_path = b.fmt("board/{s}/linux.dts", .{ microkit_board });
+    const overlay = b.fmt("board/{s}/overlay.dts", .{ microkit_board });
+    const dts_cat_cmd = b.addSystemCommand(&[_][]const u8{
+        "sh", "../../tools/dtscat", base_dts_path, overlay
+    });
+    const final_dts = dts_cat_cmd.captureStdOut();
+
     // For actually compiling the DTS into a DTB
-    const dts_path = b.fmt("board/{s}/linux.dts", .{ microkit_board });
     const dtc_cmd = b.addSystemCommand(&[_][]const u8{
         "dtc", "-q", "-I", "dts", "-O", "dtb"
     });
-    dtc_cmd.addFileArg(.{ .path = dts_path });
+    dtc_cmd.addFileArg(.{ .cwd_relative = b.getInstallPath(.prefix, "final.dts") });
+    dtc_cmd.step.dependOn(&b.addInstallFileWithDir(final_dts, .prefix, "final.dts").step);
     const dtb = dtc_cmd.captureStdOut();
 
     // Add microkit.h to be used by the API wrapper.
-    exe.addIncludePath(.{ .path = sdk_board_include_dir });
-    exe.addIncludePath(libvmm_dep.path("src"));
-    // @ivanv: shouldn't need to do this! fix our includes
-    exe.addIncludePath(libvmm_dep.path("src/arch/aarch64"));
+    exe.addIncludePath(.{ .cwd_relative = libmicrokit_include });
     // Add the static library that provides each protection domain's entry
     // point (`main()`), which runs the main handler loop.
-    exe.addObjectFile(.{ .path = libmicrokit });
-    exe.linkLibrary(libvmm);
+    exe.addObjectFile(.{ .cwd_relative = libmicrokit });
     // Specify the linker script, this is necessary to set the ELF entry point address.
-    exe.setLinkerScriptPath(.{ .path = libmicrokit_linker_script });
+    exe.setLinkerScriptPath(.{ .cwd_relative = libmicrokit_linker_script });
+
+    // Link the libvmm library, this will automatically add the libvmm headers as well.
+    exe.linkLibrary(libvmm);
 
     exe.addCSourceFiles(.{
         .files = &.{"vmm.c"},
@@ -175,7 +196,7 @@ pub fn build(b: *std.Build) void {
        b.getInstallPath(.prefix, "./report.txt")
     });
     microkit_tool_cmd.step.dependOn(b.getInstallStep());
-    // Add the "microkit" step, and make it the default step when we execute `zig build`>
+    // Add the "microkit" step, and make it the default step when we execute `zig build`
     const microkit_step = b.step("microkit", "Compile and build the final bootable image");
     microkit_step.dependOn(&microkit_tool_cmd.step);
     b.default_step = microkit_step;

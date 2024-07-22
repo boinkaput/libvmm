@@ -32,6 +32,9 @@ DTC := dtc
 CC := clang
 CC_USERLEVEL := zig cc
 LD := ld.lld
+AR := llvm-ar
+RANLIB := llvm-ranlib
+
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 # @ivanv: need to have a step for putting in the initrd node into the DTB,
@@ -43,30 +46,31 @@ MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 # @ivanv: incremental builds don't work with IMAGE_DIR changing
 BOARD_DIR := $(MICROKIT_SDK)/board/$(BOARD)/$(CONFIG)
-VMM := ../..
-VMM_TOOLS := $(VMM)/tools
-VMM_SRC_DIR := $(VMM)/src
+LIBVMM := $(abspath ../..)
+LIBVMM_TOOLS := $(LIBVMM)/tools
+LIBVMM_SRC_DIR := $(LIBVMM)/src
 SYSTEM_DESCRIPTION := board/$(BOARD)/virtio.system
 
 CURRENT_DIR := $(shell pwd)
 
-LINUX_DIR := $(VMM_TOOLS)/linux
+LINUX_DIR := $(LIBVMM_TOOLS)/linux
 LINUX_BLK_DIR := $(LINUX_DIR)/blk
+LINUX_BLK_BOARD_DIR := $(LINUX_BLK_DIR)/board/$(BOARD)
+
 UIO_DIR := $(LINUX_DIR)/uio
+UIO_DRIVER_BLK_DIR := $(LINUX_DIR)/uio_drivers/blk
 
 SDDF_DIR := $(abspath ../../dep/sddf)
+
+VMM_INCLUDE := include
 
 BLK_DRIVER_VM_DIR := board/$(BOARD)/blk_driver_vm
 BLK_DRIVER_VM_DTS_DIR := $(BLK_DRIVER_VM_DIR)/dts
 BLK_DRIVER_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/blk_driver_vm_rootfs
 
-CLIENT_VM_1_DIR := board/$(BOARD)/client_vm_1
-CLIENT_VM_1_DTS_DIR := $(CLIENT_VM_1_DIR)/dts
-CLIENT_VM_1_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_vm_1_rootfs
-
-CLIENT_VM_2_DIR := board/$(BOARD)/client_vm_2
-CLIENT_VM_2_DTS_DIR := $(CLIENT_VM_2_DIR)/dts
-CLIENT_VM_2_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_vm_2_rootfs
+CLIENT_VM_DIR := board/$(BOARD)/client_vm
+CLIENT_VM_DTS_DIR := $(CLIENT_VM_DIR)/dts
+CLIENT_VM_ROOTFS_TMP_DIR := $(BUILD_DIR)/client_vm_rootfs
 
 
 BLK_DRIVER_VM_LINUX := $(BLK_DRIVER_VM_DIR)/linux
@@ -83,60 +87,37 @@ BLK_DRIVER_VM_DTS_OVERLAYS := ${BLK_DRIVER_VM_DTS_OVERLAYS_${BOARD}}
 BLK_DRIVER_VM_DTB := $(BUILD_DIR)/blk_driver_vm.dtb
 
 
-CLIENT_VM_1_LINUX := $(CLIENT_VM_1_DIR)/linux
-CLIENT_VM_1_INITRD := $(CLIENT_VM_1_DIR)/rootfs.cpio.gz
-CLIENT_VM_1_INITRD_MODIFIED := $(BUILD_DIR)/client_vm_1_rootfs.cpio.gz
-CLIENT_VM_1_BASE_DTS := $(CLIENT_VM_1_DTS_DIR)/linux.dts
-CLIENT_VM_1_DTS_OVERLAYS_qemu_arm_virt :=	$(CLIENT_VM_1_DTS_DIR)/init.dts \
-											$(CLIENT_VM_1_DTS_DIR)/virtio.dts
-CLIENT_VM_1_DTS_OVERLAYS_odroidc4 :=	$(CLIENT_VM_1_DTS_DIR)/init.dts \
-										$(CLIENT_VM_1_DTS_DIR)/virtio.dts\
-										$(CLIENT_VM_1_DTS_DIR)/disable.dts
-CLIENT_VM_1_DTS_OVERLAYS := ${CLIENT_VM_1_DTS_OVERLAYS_${BOARD}}
-CLIENT_VM_1_DTB := $(BUILD_DIR)/client_vm_1.dtb
-
-
-CLIENT_VM_2_LINUX := $(CLIENT_VM_2_DIR)/linux
-CLIENT_VM_2_INITRD := $(CLIENT_VM_2_DIR)/rootfs.cpio.gz
-CLIENT_VM_2_INITRD_MODIFIED := $(BUILD_DIR)/client_vm_2_rootfs.cpio.gz
-CLIENT_VM_2_BASE_DTS := $(CLIENT_VM_2_DTS_DIR)/linux.dts
-CLIENT_VM_2_DTS_OVERLAYS_qemu_arm_virt :=	$(CLIENT_VM_2_DTS_DIR)/init.dts \
-											$(CLIENT_VM_2_DTS_DIR)/virtio.dts
-CLIENT_VM_2_DTS_OVERLAYS_odroidc4 :=	$(CLIENT_VM_2_DTS_DIR)/init.dts \
-										$(CLIENT_VM_2_DTS_DIR)/virtio.dts \
-										$(CLIENT_VM_2_DTS_DIR)/disable.dts
-CLIENT_VM_2_DTS_OVERLAYS := ${CLIENT_VM_2_DTS_OVERLAYS_${BOARD}}
-CLIENT_VM_2_DTB := $(BUILD_DIR)/client_vm_2.dtb
-
-SDDF_UTIL := $(SDDF_DIR)/util
+CLIENT_VM_LINUX := $(CLIENT_VM_DIR)/linux
+CLIENT_VM_INITRD := $(CLIENT_VM_DIR)/rootfs.cpio.gz
+CLIENT_VM_INITRD_MODIFIED := $(BUILD_DIR)/client_vm_rootfs.cpio.gz
+CLIENT_VM_BASE_DTS := $(CLIENT_VM_DTS_DIR)/linux.dts
+CLIENT_VM_DTS_OVERLAYS_qemu_arm_virt :=	$(CLIENT_VM_DTS_DIR)/init.dts \
+											$(CLIENT_VM_DTS_DIR)/virtio.dts
+CLIENT_VM_DTS_OVERLAYS_odroidc4 :=	$(CLIENT_VM_DTS_DIR)/init.dts \
+										$(CLIENT_VM_DTS_DIR)/virtio.dts\
+										$(CLIENT_VM_DTS_DIR)/disable.dts
+CLIENT_VM_DTS_OVERLAYS := ${CLIENT_VM_DTS_OVERLAYS_${BOARD}}
+CLIENT_VM_DTB := $(BUILD_DIR)/client_vm.dtb
 
 SDDF_BLK_COMPONENTS := $(SDDF_DIR)/blk/components
 SDDF_BLK_UTIL := $(SDDF_DIR)/blk/util
 
-SDDF_SERIAL_COMPONENTS := $(SDDF_DIR)/serial/components
+ifeq ($(strip $(BOARD)), odroidc4)
+	export UART_DRIVER_DIR := meson
+else ifeq ($(strip $(BOARD)), qemu_arm_virt)
+	export UART_DRIVER_DIR := arm
+else
+$(error Unsupported BOARD given)
+endif
+SDDF_SERIAL_DRIVER := $(SDDF_DIR)/drivers/serial/$(UART_DRIVER_DIR)
 
-SDDF_SERIAL_DRIVER_qemu_arm_virt := $(SDDF_DIR)/drivers/serial/arm
-SDDF_SERIAL_DRIVER_odroidc4 := $(SDDF_DIR)/drivers/serial/meson
-SDDF_SERIAL_DRIVER := ${SDDF_SERIAL_DRIVER_${BOARD}}
+ELFS := client_vmm.elf blk_driver_vmm.elf serial_virt_tx.elf serial_virt_rx.elf uart_driver.elf blk_virt.elf
 
-ELFS := client_vmm_1.elf client_vmm_2.elf blk_driver_vmm.elf serial_virt_tx.elf serial_virt_rx.elf uart_driver.elf blk_virt.elf
+BLK_DRIVER_VM_USERLEVEL := uio_blk_driver
+BLK_DRIVER_VM_USERLEVEL_INIT := blk_driver_init
 
-BLK_DRIVER_VM_USERLEVEL_qemu_arm_virt := uio_blk_driver
-BLK_DRIVER_VM_USERLEVEL_odroidc4 := uio_blk_driver
-BLK_DRIVER_VM_USERLEVEL := ${BLK_DRIVER_VM_USERLEVEL_${BOARD}}
-BLK_DRIVER_VM_USERLEVEL_INIT_qemu_arm_virt := qemu_blk_driver_init
-BLK_DRIVER_VM_USERLEVEL_INIT_odroidc4 := blk_driver_init
-BLK_DRIVER_VM_USERLEVEL_INIT := ${BLK_DRIVER_VM_USERLEVEL_INIT_${BOARD}}
-
-CLIENT_VM_1_USERLEVEL :=
-CLIENT_VM_1_USERLEVEL_INIT_qemu_arm_virt := qemu_blk_client_init
-CLIENT_VM_1_USERLEVEL_INIT_odroidc4 := blk_client_init
-CLIENT_VM_1_USERLEVEL_INIT := ${CLIENT_VM_1_USERLEVEL_INIT_${BOARD}}
-
-CLIENT_VM_2_USERLEVEL :=
-CLIENT_VM_2_USERLEVEL_INIT_qemu_arm_virt := qemu_blk_client_init
-CLIENT_VM_2_USERLEVEL_INIT_odroidc4 := blk_client_init
-CLIENT_VM_2_USERLEVEL_INIT := ${CLIENT_VM_2_USERLEVEL_INIT_${BOARD}}
+CLIENT_VM_USERLEVEL :=
+CLIENT_VM_USERLEVEL_INIT := blk_client_init
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
@@ -155,39 +136,21 @@ VMM_OBJS := printf.o \
 			tcb.o \
 			vcpu.o
 
-CLIENT_VMM_1_OBJS := $(VMM_OBJS) \
-					client_images_1.o \
+CLIENT_VMM_OBJS := $(VMM_OBJS) \
+					client_images.o \
 					client_vmm.o \
 					console.o \
 					block.o \
 					mmio.o \
-					sddf_blk_bitarray.o \
-					sddf_blk_fsmalloc.o \
-					sddf_printf.o sddf_putchar_debug.o \
-
-CLIENT_VMM_2_OBJS := $(VMM_OBJS) \
-					client_images_2.o \
-					client_vmm.o \
-					console.o \
-					block.o \
-					mmio.o \
-					sddf_blk_bitarray.o \
-					sddf_blk_fsmalloc.o \
-					sddf_printf.o sddf_putchar_debug.o \
+					libsddf_util_debug.a 
 
 BLK_DRIVER_VMM_OBJS := $(VMM_OBJS) \
 					blk_driver_images.o \
 					blk_driver_vmm.o \
 					console.o \
-					mmio.o \
+					mmio.o 
 
-
-# sddf_printf.o sdd_putchar_debug.o only needed during debug mode
-SERIAL_VIRT_TX_OBJS := virt_tx.o sddf_printf.o sddf_putchar_debug.o
-SERIAL_VIRT_RX_OBJS := virt_rx.o sddf_printf.o sddf_putchar_debug.o
-SERIAL_DRIVER_OBJS := uart.o sddf_printf.o sddf_putchar_debug.o
-
-BLK_VIRT_OBJS := sddf_blk_virt.o sddf_cache.o sddf_blk_fsmalloc.o sddf_blk_bitarray.o sddf_blk_util.o sddf_printf.o sddf_putchar_debug.o 
+BLK_VIRT_OBJS := sddf_blk_virt.o libsddf_util_debug.a
 UIO_BLK_DRIVER_OBJS := blk.o libuio.o
 
 # Toolchain flags
@@ -204,9 +167,10 @@ CFLAGS := -mstrict-align \
 		  -nostdlib \
 		  -Wno-unused-command-line-argument \
 		  -Wall -Wno-unused-function -Werror \
-		  -I$(VMM_SRC_DIR)/arch/aarch64 -I$(VMM_SRC_DIR) -I$(VMM_SRC_DIR)/util -I$(BOARD_DIR)/include \
-		  -I$(SDDF_SERIAL_DRIVER)/include \
+		  -I$(BOARD_DIR)/include \
 		  -I$(SDDF_DIR)/include \
+		  -I$(LIBVMM)/include \
+		  -I$(VMM_INCLUDE) \
 		  -DBOARD_$(BOARD) \
 		  -DCONFIG_$(CONFIG) \
 		  -target aarch64-none-elf
@@ -218,10 +182,11 @@ CFLAGS_LINUX :=	-g3 \
 				-D_GNU_SOURCE \
 				-I$(SDDF_DIR)/include \
 				-I$(LINUX_DIR)/include \
+				-I$(VMM_INCLUDE) \
 				-target aarch64-linux-gnu
 
 LDFLAGS := -L$(BOARD_DIR)/lib
-LIBS := -lmicrokit -Tmicrokit.ld
+LIBS := -lmicrokit -Tmicrokit.ld $(BUILD_DIR)/libsddf_util_debug.a
 
 ifeq ($(BOARD), qemu_arm_virt)
 	NUM_PART = 2
@@ -248,42 +213,58 @@ qemu: all $(BUILD_DIR)/storage
 
 directories:
 	$(shell mkdir -p $(BUILD_DIR))
+	$(shell mkdir -p $(BUILD_DIR)/util)
+	$(shell mkdir -p $(BUILD_DIR)/serial)
+
+SDDF_LIB_UTIL_DBG_OBJS := cache.o sddf_printf.o newlibc.o assert.o putchar_debug.o bitarray.o fsmalloc.o
+
+$(BUILD_DIR)/libsddf_util_debug.a: $(addprefix ${BUILD_DIR}/util/, ${SDDF_LIB_UTIL_DBG_OBJS})
+	${AR} rv $@ $^
+	${RANLIB} $@
+
+$(BUILD_DIR)/util/sddf_printf.o: ${SDDF_DIR}/util/printf.c
+	${CC} ${CFLAGS} -c -o $@ $<
+
+$(BUILD_DIR)/util/%.o: ${SDDF_DIR}/util/%.c
+	${CC} ${CFLAGS} -c -o $@ $<
+
+$(BUILD_DIR)/uart_driver.elf: $(BUILD_DIR)/serial/uart_driver.o
+	$(LD) $(LDFLAGS) $< $(LIBS) -o $@
+
+$(BUILD_DIR)/serial/uart_driver.o: ${SDDF_SERIAL_DRIVER}/uart.c
+	$(CC) -c $(CFLAGS) -I${SDDF_SERIAL_DRIVER}/include -o $@ $< 
+
+$(BUILD_DIR)/serial_virt_%.elf: $(BUILD_DIR)/serial/virt_%.o
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/serial/virt_%.o: ${SDDF_DIR}/serial/components/virt_%.c 
+	${CC} ${CFLAGS} -o $@ -c $<
 
 $(BUILD_DIR)/storage:
-	$(VMM_TOOLS)/mkvirtdisk $@ $(NUM_PART) $(BLK_SIZE) $(BLK_MEM)
+	$(LIBVMM_TOOLS)/mkvirtdisk $@ $(NUM_PART) $(BLK_SIZE) $(BLK_MEM)
 
 # Unpack rootfs, put the userlevel in /root and userlevel_init in /etc/init.d/S99, repack rootfs
 $(BLK_DRIVER_VM_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL)) \
 								  $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL_INIT))
-	$(VMM_TOOLS)/packrootfs $(BLK_DRIVER_VM_INITRD) $(BLK_DRIVER_VM_ROOTFS_TMP_DIR) -o $(BLK_DRIVER_VM_INITRD_MODIFIED) \
+	$(LIBVMM_TOOLS)/packrootfs $(BLK_DRIVER_VM_INITRD) $(BLK_DRIVER_VM_ROOTFS_TMP_DIR) -o $(BLK_DRIVER_VM_INITRD_MODIFIED) \
 							--startup $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL_INIT)) \
 							--home $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VM_USERLEVEL))
 	
-$(CLIENT_VM_1_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_1_USERLEVEL)) \
-								$(addprefix $(BUILD_DIR)/, $(CLIENT_VM_1_USERLEVEL_INIT))
-	$(VMM_TOOLS)/packrootfs $(CLIENT_VM_1_INITRD) $(CLIENT_VM_1_ROOTFS_TMP_DIR) -o $(CLIENT_VM_1_INITRD_MODIFIED) \
-							--startup $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_1_USERLEVEL_INIT)) \
-							--home $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_1_USERLEVEL))
+$(CLIENT_VM_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_USERLEVEL)) \
+								$(addprefix $(BUILD_DIR)/, $(CLIENT_VM_USERLEVEL_INIT))
+	$(LIBVMM_TOOLS)/packrootfs $(CLIENT_VM_INITRD) $(CLIENT_VM_ROOTFS_TMP_DIR) -o $(CLIENT_VM_INITRD_MODIFIED) \
+							--startup $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_USERLEVEL_INIT)) \
+							--home $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_USERLEVEL))
 	
-$(CLIENT_VM_2_INITRD_MODIFIED): $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_2_USERLEVEL)) \
-								$(addprefix $(BUILD_DIR)/, $(CLIENT_VM_2_USERLEVEL_INIT))
-	$(VMM_TOOLS)/packrootfs $(CLIENT_VM_2_INITRD) $(CLIENT_VM_2_ROOTFS_TMP_DIR) -o $(CLIENT_VM_2_INITRD_MODIFIED) \
-							--startup $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_2_USERLEVEL_INIT)) \
-							--home $(addprefix $(BUILD_DIR)/, $(CLIENT_VM_2_USERLEVEL))
-
 $(BLK_DRIVER_VM_DTB): $(BLK_DRIVER_VM_BASE_DTS) $(BLK_DRIVER_VM_DTS_OVERLAYS)
-	$(VMM_TOOLS)/dtscat $^ > $(BUILD_DIR)/blk_driver_vm.dts
+	$(LIBVMM_TOOLS)/dtscat $^ > $(BUILD_DIR)/blk_driver_vm.dts
 	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/blk_driver_vm.dts > $@
 
-$(CLIENT_VM_1_DTB): $(CLIENT_VM_1_BASE_DTS) $(CLIENT_VM_1_DTS_OVERLAYS)
-	$(VMM_TOOLS)/dtscat $^ > $(BUILD_DIR)/client_vm_1.dts
-	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_vm_1.dts > $@
+$(CLIENT_VM_DTB): $(CLIENT_VM_BASE_DTS) $(CLIENT_VM_DTS_OVERLAYS)
+	$(LIBVMM_TOOLS)/dtscat $^ > $(BUILD_DIR)/client_vm.dts
+	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_vm.dts > $@
 
-$(CLIENT_VM_2_DTB): $(CLIENT_VM_2_BASE_DTS) $(CLIENT_VM_2_DTS_OVERLAYS)
-	$(VMM_TOOLS)/dtscat $^ > $(BUILD_DIR)/client_vm_2.dts
-	$(DTC) -q -I dts -O dtb $(BUILD_DIR)/client_vm_2.dts > $@
-
-$(BUILD_DIR)/blk_driver_images.o: $(VMM_TOOLS)/package_guest_images.S $(BLK_DRIVER_VM_LINUX) $(BLK_DRIVER_VM_DTB) $(BLK_DRIVER_VM_INITRD_MODIFIED)
+$(BUILD_DIR)/blk_driver_images.o: $(LIBVMM_TOOLS)/package_guest_images.S $(BLK_DRIVER_VM_LINUX) $(BLK_DRIVER_VM_DTB) $(BLK_DRIVER_VM_INITRD_MODIFIED)
 	$(CC) -c -g3 -x assembler-with-cpp \
 					-DGUEST_KERNEL_IMAGE_PATH=\"$(BLK_DRIVER_VM_LINUX)\" \
 					-DGUEST_DTB_IMAGE_PATH=\"$(BLK_DRIVER_VM_DTB)\" \
@@ -291,59 +272,39 @@ $(BUILD_DIR)/blk_driver_images.o: $(VMM_TOOLS)/package_guest_images.S $(BLK_DRIV
 					-target aarch64-none-elf \
 					$< -o $@
 
-$(BUILD_DIR)/client_images_1.o: $(VMM_TOOLS)/package_guest_images.S $(CLIENT_VM_1_LINUX) $(CLIENT_VM_1_DTB) $(CLIENT_VM_1_INITRD_MODIFIED)
+$(BUILD_DIR)/client_images.o: $(LIBVMM_TOOLS)/package_guest_images.S $(CLIENT_VM_LINUX) $(CLIENT_VM_DTB) $(CLIENT_VM_INITRD_MODIFIED)
 	$(CC) -c -g3 -x assembler-with-cpp \
-					-DGUEST_KERNEL_IMAGE_PATH=\"$(CLIENT_VM_1_LINUX)\" \
-					-DGUEST_DTB_IMAGE_PATH=\"$(CLIENT_VM_1_DTB)\" \
-					-DGUEST_INITRD_IMAGE_PATH=\"$(CLIENT_VM_1_INITRD_MODIFIED)\" \
-					-target aarch64-none-elf \
-					$< -o $@
-
-$(BUILD_DIR)/client_images_2.o: $(VMM_TOOLS)/package_guest_images.S $(CLIENT_VM_2_LINUX) $(CLIENT_VM_2_DTB) $(CLIENT_VM_2_INITRD_MODIFIED)
-	$(CC) -c -g3 -x assembler-with-cpp \
-					-DGUEST_KERNEL_IMAGE_PATH=\"$(CLIENT_VM_2_LINUX)\" \
-					-DGUEST_DTB_IMAGE_PATH=\"$(CLIENT_VM_2_DTB)\" \
-					-DGUEST_INITRD_IMAGE_PATH=\"$(CLIENT_VM_2_INITRD_MODIFIED)\" \
+					-DGUEST_KERNEL_IMAGE_PATH=\"$(CLIENT_VM_LINUX)\" \
+					-DGUEST_DTB_IMAGE_PATH=\"$(CLIENT_VM_DTB)\" \
+					-DGUEST_INITRD_IMAGE_PATH=\"$(CLIENT_VM_INITRD_MODIFIED)\" \
 					-target aarch64-none-elf \
 					$< -o $@
 
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/%.c Makefile
+$(BUILD_DIR)/%.o: $(LIBVMM_SRC_DIR)/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/util/%.c Makefile
+$(BUILD_DIR)/%.o: $(LIBVMM_SRC_DIR)/util/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/arch/aarch64/%.c Makefile
+$(BUILD_DIR)/%.o: $(LIBVMM_SRC_DIR)/arch/aarch64/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/arch/aarch64/vgic/%.c Makefile
+$(BUILD_DIR)/%.o: $(LIBVMM_SRC_DIR)/arch/aarch64/vgic/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(VMM_SRC_DIR)/virtio/%.c Makefile
-	$(CC) -c $(CFLAGS) $< -o $@
-
-$(BUILD_DIR)/sddf_%.o: $(SDDF_UTIL)/%.c Makefile
-	$(CC) -c $(CFLAGS) $< -o $@
-
-$(BUILD_DIR)/%.o: $(SDDF_SERIAL_COMPONENTS)/%.c Makefile
-	$(CC) -c $(CFLAGS) -DSERIAL_NUM_CLIENTS=3 -DSERIAL_TRANSFER_WITH_COLOUR=1 $< -o $@
-
-$(BUILD_DIR)/%.o: $(SDDF_SERIAL_DRIVER)/%.c Makefile
+$(BUILD_DIR)/%.o: $(LIBVMM_SRC_DIR)/virtio/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/sddf_blk_%.o: $(SDDF_BLK_COMPONENTS)/%.c Makefile
-	$(CC) -c $(CFLAGS) -DBLK_NUM_CLIENTS=2 $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/sddf_blk_%.o: $(SDDF_BLK_UTIL)/%.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/client_vmm_1.elf: $(addprefix $(BUILD_DIR)/, $(CLIENT_VMM_1_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-$(BUILD_DIR)/client_vmm_2.elf: $(addprefix $(BUILD_DIR)/, $(CLIENT_VMM_2_OBJS))
+$(BUILD_DIR)/client_vmm.elf: $(addprefix $(BUILD_DIR)/, $(CLIENT_VMM_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/blk_driver_vmm.elf: $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VMM_OBJS))
@@ -352,31 +313,19 @@ $(BUILD_DIR)/blk_driver_vmm.elf: $(addprefix $(BUILD_DIR)/, $(BLK_DRIVER_VMM_OBJ
 $(BUILD_DIR)/blk_virt.elf: $(addprefix $(BUILD_DIR)/, $(BLK_VIRT_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/serial_virt_tx.elf: $(addprefix $(BUILD_DIR)/, $(SERIAL_VIRT_TX_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-$(BUILD_DIR)/serial_virt_rx.elf: $(addprefix $(BUILD_DIR)/, $(SERIAL_VIRT_RX_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-$(BUILD_DIR)/uart_driver.elf: $(addprefix $(BUILD_DIR)/, $(SERIAL_DRIVER_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
 $(BUILD_DIR)/postmark: $(LINUX_BLK_DIR)/postmark.c
 	$(CC_USERLEVEL) $(CFLAGS_LINUX) $< -o $@
 
 $(BUILD_DIR)/blk_client_init: $(LINUX_BLK_DIR)/blk_client_init
 	cp $< $@
 
-$(BUILD_DIR)/blk_driver_init: $(LINUX_BLK_DIR)/blk_driver_init
-	cp $< $@
-
-$(BUILD_DIR)/qemu_blk_client_init: $(LINUX_BLK_DIR)/qemu_blk_client_init
-	cp $< $@
-
-$(BUILD_DIR)/qemu_blk_driver_init: $(LINUX_BLK_DIR)/qemu_blk_driver_init
+$(BUILD_DIR)/blk_driver_init: $(LINUX_BLK_BOARD_DIR)/blk_driver_init
 	cp $< $@
 
 $(BUILD_DIR)/%.o: $(UIO_DIR)/%.c Makefile
+	$(CC_USERLEVEL) -c $(CFLAGS_LINUX) $< -o $@
+
+$(BUILD_DIR)/%.o: $(UIO_DRIVER_BLK_DIR)/%.c Makefile
 	$(CC_USERLEVEL) -c $(CFLAGS_LINUX) $< -o $@
 
 $(BUILD_DIR)/uio_blk_driver: $(addprefix $(BUILD_DIR)/, $(UIO_BLK_DRIVER_OBJS))

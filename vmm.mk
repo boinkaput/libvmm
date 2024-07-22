@@ -4,10 +4,9 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 # Snippet to build libvmm.a, to be included in a full-system Makefile.
-# Needs the variable LionsOS to point to the top of the LionsOS tree.
 #
-V3_BOARDS := BOARD_imx8mm_evk
-ifeq ($(filter ${MICROKIT_BOARD},${V3_BOARDS}),)
+GIC_V3_BOARDS := imx8mm_evk maaxboard
+ifeq ($(filter ${MICROKIT_BOARD},${GIC_V3_BOARDS}),)
 	VGIC := GIC_V2
 	VGIC_FILES := src/arch/aarch64/vgic/vgic_v2.c
 else
@@ -35,9 +34,10 @@ CFLAGS += -I${SDDF}/include
 
 ARCH_INDEP_FILES := src/util/printf.c \
 		    src/util/util.c \
+		    src/virtio/block.c \
 		    src/virtio/console.c \
 		    src/virtio/mmio.c \
-		    src/virtio/virtio.c \
+		    src/virtio/sound.c \
 		    src/guest.c
 
 CFILES := ${AARCH64_FILES} ${ARCH_INDEP_FILES}
@@ -49,7 +49,7 @@ CFLAGS += -MD
 # Force rebuid if CFLAGS changes.
 # This will pick up (among other things} changes
 # to Microkit BOARD and CONFIG.
-CHECK_LIBVMM_CFLAGS:=.libvmm_cflags.$(shell echo ${CFLAGS}|md5sum -|sed 's/ *-$$//')
+CHECK_LIBVMM_CFLAGS:=.libvmm_cflags.$(shell echo ${CFLAGS} | shasum | sed 's/ *-$$//')
 .libvmm_cflags.%:
 	rm -f .libvmm_cflags.*
 	echo ${CFLAGS} > $@
