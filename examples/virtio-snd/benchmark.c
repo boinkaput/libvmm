@@ -61,6 +61,24 @@ static event_id_t benchmarking_events[] = {
     SEL4BENCH_EVENT_BRANCH_MISPREDICT,
 };
 
+static void print_pdid_name(uint64_t pd_id)
+{
+    switch (pd_id) {
+    case PD_SND_DRV_ID:
+        sddf_printf("SND_DRIVER_VMM");
+        break;
+    case PD_VIRT_ID:
+        sddf_printf("snd_virt");
+        break;
+    case PD_CLIENT_ID:
+        sddf_printf("native_client");
+        break;
+    default:
+        sddf_printf("unknown");
+        break;
+    }
+}
+
 #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
 static void microkit_benchmark_start(void)
 {
@@ -96,14 +114,13 @@ static void microkit_benchmark_stop_tcb(uint64_t pd_id, uint64_t *total, uint64_
 
 static void print_benchmark_details(uint64_t pd_id, uint64_t kernel_util, uint64_t kernel_entries, uint64_t number_schedules, uint64_t total_util)
 {
-    if (pd_id == PD_TOTAL) sddf_printf("Total utilisation details: ");
-    else sddf_printf("Utilisation details for PD: ");
-    switch (pd_id) {
-    case PD_CLIENT_ID: sddf_printf("PD_CLIENT_ID"); break;
-    case PD_VIRT_ID: sddf_printf("PD_VIRT_ID"); break;
-    case PD_SND_DRV_ID: sddf_printf("PD_SND_DRV_ID"); break;
+    if (pd_id == PD_TOTAL) {
+        sddf_printf("Total utilisation details: \n");
+    } else {
+        sddf_printf("Utilisation details for PD: ");
+        print_pdid_name(pd_id);
+        sddf_printf(" (%lx)\n", pd_id);
     }
-    if (pd_id != PD_TOTAL) sddf_printf(" ( %lx)", pd_id);
     sddf_printf("{\nKernelUtilisation:  %lx\nKernelEntries:  %lx\nNumberSchedules:  %lx\nTotalUtilisation:  %lx\n}\n",
                 kernel_util, kernel_entries, number_schedules, total_util);
 }
@@ -151,32 +168,31 @@ void notified(microkit_channel ch)
 
     switch(ch) {
     case START:
-        sddf_printf("Starting\n");
+#ifdef MICROKIT_CONFIG_benchmark
         sel4bench_reset_counters();
         THREAD_MEMORY_RELEASE();
         sel4bench_start_counters(benchmark_bf);
 
-        #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
+#ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
         microkit_benchmark_start();
-        #endif
-
-        #ifdef CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES
-        seL4_BenchmarkResetLog();
-        #endif
-
-        #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
         start_cycles = bench->ts;
         start_ccount = bench->ccount;
-        #endif
+#endif
+
+#ifdef CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES
+        seL4_BenchmarkResetLog();
+#endif
+#endif
 
         break;
     case STOP:
 
-        #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
+#ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
         end_cycles = bench->ts;
         end_ccount = bench->ccount;
-        #endif
+#endif
 
+#ifdef MICROKIT_CONFIG_benchmark
         sel4bench_get_counters(benchmark_bf, &counter_values[0]);
         sel4bench_stop_counters(benchmark_bf);
 
@@ -185,8 +201,9 @@ void notified(microkit_channel ch)
         //     sddf_printf("%s: %llX\n", counter_names[i], counter_values[i]);
         // }
         // sddf_printf("}\n");
+#endif
 
-        #ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
+#ifdef CONFIG_BENCHMARK_TRACK_UTILISATION
         uint64_t total;
         uint64_t kernel;
         uint64_t entries;
@@ -197,10 +214,14 @@ void notified(microkit_channel ch)
         microkit_benchmark_stop(&total, &number_schedules, &kernel, &entries);
         print_benchmark_details(PD_TOTAL, kernel, entries, number_schedules, total);
 
-        // for (int i = 0; i < PD_ID_COUNT; i++) {
-        //     microkit_benchmark_stop_tcb(pd_ids[i], &total, &number_schedules, &kernel, &entries);
-        //     print_benchmark_details(pd_ids[i], kernel, entries, number_schedules, total);
-        // }
+        microkit_benchmark_stop_tcb(PD_SND_DRV_ID, &total, &number_schedules, &kernel, &entries);
+        print_benchmark_details(PD_SND_DRV_ID, kernel, entries, number_schedules, total);
+
+        microkit_benchmark_stop_tcb(PD_VIRT_ID, &total, &number_schedules, &kernel, &entries);
+        print_benchmark_details(PD_VIRT_ID, kernel, entries, number_schedules, total);
+
+        microkit_benchmark_stop_tcb(PD_CLIENT_ID, &total, &number_schedules, &kernel, &entries);
+        print_benchmark_details(PD_CLIENT_ID, kernel, entries, number_schedules, total);
 
         // sddf_printf("s_cy %20lu\r\n", start_cycles);
         // sddf_printf("e_cy %20lu\r\n", end_cycles);
@@ -208,14 +229,13 @@ void notified(microkit_channel ch)
         // sddf_printf("e_ccount %20lu\r\n", end_ccount);
         sddf_printf("total %16lu\r\n", end_cycles - start_cycles);
         sddf_printf("idle  %16lu\r\n", end_ccount - start_ccount);
+#endif
 
-        #endif
-
-        #ifdef CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES
+#ifdef CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES
         entries = seL4_BenchmarkFinalizeLog();
         sddf_printf("KernelEntries:  %llx\n", entries);
         seL4_BenchmarkTrackDumpSummary(log_buffer, entries);
-        #endif
+#endif
 
         break;
     default:
@@ -244,7 +264,6 @@ void init(void)
     benchmark_bf = mask;
 
     /* Notify the idle thread that the sel4bench library is initialised. */
-    sddf_printf("STARTING IDLE");
     microkit_notify(INIT);
 
 #ifdef CONFIG_BENCHMARK_TRACK_KERNEL_ENTRIES
@@ -252,4 +271,43 @@ void init(void)
     if (res_buf) sddf_printf("Could not set log buffer:  %llx\n", res_buf);
     else sddf_printf("Log buffer set\n");
 #endif
+}
+
+void fault(microkit_id id, microkit_msginfo msginfo)
+{
+    sddf_printf("BENCH|LOG: Faulting PD ");
+    print_pdid_name(id);
+    sddf_printf(" (%x)\n", id);
+
+    seL4_UserContext regs;
+    seL4_TCB_ReadRegisters(BASE_TCB_CAP + id, false, 0, sizeof(seL4_UserContext) / sizeof(seL4_Word), &regs);
+    sddf_printf("Registers: \npc : %lx\nspsr : %lx\nx0 : %lx\nx1 : %lx\nx2 : %lx\nx3 : %lx\nx4 : %lx\nx5 : %lx\nx6 : %lx\nx7 : %lx\n",
+                regs.pc, regs.spsr, regs.x0, regs.x1, regs.x2, regs.x3, regs.x4, regs.x5, regs.x6, regs.x7);
+
+    switch (microkit_msginfo_get_label(msginfo)) {
+    case seL4_Fault_CapFault: {
+        uint64_t ip = seL4_GetMR(seL4_CapFault_IP);
+        uint64_t fault_addr = seL4_GetMR(seL4_CapFault_Addr);
+        uint64_t in_recv_phase = seL4_GetMR(seL4_CapFault_InRecvPhase);
+        sddf_printf("CapFault: ip=%lx  fault_addr=%lx  in_recv_phase=%s\n", ip, fault_addr,
+                    (in_recv_phase == 0 ? "false" : "true"));
+        break;
+    }
+    case seL4_Fault_UserException: {
+        sddf_printf("UserException\n");
+        break;
+    }
+    case seL4_Fault_VMFault: {
+        uint64_t ip = seL4_GetMR(seL4_VMFault_IP);
+        uint64_t fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+        uint64_t is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+        uint64_t fsr = seL4_GetMR(seL4_VMFault_FSR);
+        sddf_printf("VMFault: ip=%lx  fault_addr=%lx  fsr=%lx %s\n", ip, fault_addr, fsr,
+                    (is_instruction ? "(instruction fault)" : "(data fault)"));
+        break;
+    }
+    default:
+        sddf_printf("Unknown fault\n");
+        break;
+    }
 }
