@@ -211,8 +211,6 @@ static bool handle_uio_interrupt(driver_state_t *state)
 
 int main(int argc, char **argv)
 {
-    system("alsactl init -U");
-
     LOG_SOUND("Starting sound driver\n");
 
     int uio_fd = open("/dev/uio0", O_RDWR);
