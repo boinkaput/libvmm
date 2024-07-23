@@ -49,13 +49,12 @@
     <memory_region name="serial_tx_queue_client1" size="0x1_000" />
     <memory_region name="serial_tx_queue_client2" size="0x1_000" />
 
-    <protection_domain name="benchIdle" priority="1" >
+    <protection_domain name="benchIdle" priority="1">
         <program_image path="idle.elf" />
-        <!-- benchmark.c puts PMU data in here for lwip to collect -->
         <map mr="cyclecounters" vaddr="0x5_010_000" perms="rw" cached="true" setvar_vaddr="cyclecounters_vaddr" />
     </protection_domain>
 
-    <protection_domain name="bench" priority="102" >
+    <protection_domain name="bench" priority="102">
         <program_image path="benchmark.elf" />
 
         <map mr="cyclecounters" vaddr="0x5_010_000" perms="rw" cached="true" setvar_vaddr="cyclecounters_vaddr" />
@@ -131,7 +130,7 @@
             <map mr="serial_rx_data_client0" vaddr="0x4_006_000" perms="r" cached="true" setvar_vaddr="rx_data_cli0" />
         </protection_domain>
 
-        <protection_domain name="sound_virt" priority="99" budget="20000" id="2">
+        <protection_domain name="sound_virt" priority="99" id="2">
             <program_image path="sound_virt.elf" />
 
             <map mr="snd_data" vaddr="0x9_200_000" perms="rw" cached="true" setvar_vaddr="data_region_vaddr"/>
@@ -148,13 +147,14 @@
             <map mr="snd_drv_pcm_res" vaddr="0x8_600_000" perms="rw" cached="true" setvar_vaddr="drv_pcm_res" />
         </protection_domain>
 
-        <protection_domain name="native_client" priority="97" budget="20000" id="3">
+        <protection_domain name="native_client" priority="97" id="3">
             <program_image path="native_client.elf" />
             <map mr="serial_tx_queue_client1" vaddr="0x4_000_000" perms="rw" cached="true" setvar_vaddr="serial_tx_queue" />
             <map mr="serial_tx_data_client1" vaddr="0x4_001_000" perms="rw" cached="true" setvar_vaddr="serial_tx_data" />
 
             <map mr="snd_data" vaddr="0x9_200_000" perms="rw" cached="true" setvar_vaddr="sound_data_region" />
             <map mr="snd_shared" vaddr="0x5_000_000" perms="rw" cached="true" setvar_vaddr="sound_shared_state" />
+
             <map mr="snd_c0_cmd_req" vaddr="0x6_000_000" perms="rw" cached="true" setvar_vaddr="sound_cmd_req" />
             <map mr="snd_c0_cmd_res" vaddr="0x6_200_000" perms="rw" cached="true" setvar_vaddr="sound_cmd_res" />
             <map mr="snd_c0_pcm_req" vaddr="0x6_400_000" perms="rw" cached="true" setvar_vaddr="sound_pcm_req" />
