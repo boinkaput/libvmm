@@ -112,18 +112,18 @@ snd_driver_vm.dts: $(SND_DRIVER_VM_DIR)/dts/linux.dts $(SND_DRIVER_VM_DIR)/dts/i
 snd_driver_vm.dtb: snd_driver_vm.dts
 	$(DTC) -q -I dts -O dtb $< > $@
 
-snd_driver_vm_rootfs.cpio.gz: $(LINUX_TOOLS_DIR)/snd/sound $(SND_DRIVER_VM_USERLEVEL_IMAGES) $(SND_DRIVER_VM_ASOUND_CONFIG)
-	$(LIBVMM)/tools/packrootfs $(SND_DRIVER_VM_DIR)/rootfs.cpio.gz snd_driver_vm_rootfs -o snd_driver_vm_rootfs.cpio.gz \
-								--startup $(LINUX_TOOLS_DIR)/snd/sound \
+snd_driver_vm_rootfs.cpio.gz: snd_driver_init $(SND_DRIVER_VM_USERLEVEL_IMAGES) $(SND_DRIVER_VM_ASOUND_CONFIG)
+	$(LIBVMM)/tools/packrootfs $(SND_DRIVER_VM_DIR)/min_rootfs.cpio.gz snd_driver_vm_rootfs -o snd_driver_vm_rootfs.cpio.gz \
+								--init snd_driver_init \
 								--home $(SND_DRIVER_VM_USERLEVEL_IMAGES) \
 								--etc $(SND_DRIVER_VM_ASOUND_CONFIG)
 
 snd_driver_vmm.o: $(EXAMPLE_DIR)/snd_driver_vmm.c $(CHECK_FLAGS_BOARD_MD5)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-snd_driver_vm_images.o: $(LIBVMM)/tools/package_guest_images.S $(SND_DRIVER_VM_DIR)/linux snd_driver_vm.dtb snd_driver_vm_rootfs.cpio.gz
+snd_driver_vm_images.o: $(LIBVMM)/tools/package_guest_images.S $(SND_DRIVER_VM_DIR)/min_linux snd_driver_vm.dtb snd_driver_vm_rootfs.cpio.gz
 	$(CC) -c -g3 -x assembler-with-cpp \
-					-DGUEST_KERNEL_IMAGE_PATH=\"$(SND_DRIVER_VM_DIR)/linux\" \
+					-DGUEST_KERNEL_IMAGE_PATH=\"$(SND_DRIVER_VM_DIR)/min_linux\" \
 					-DGUEST_DTB_IMAGE_PATH=\"snd_driver_vm.dtb\" \
 					-DGUEST_INITRD_IMAGE_PATH=\"snd_driver_vm_rootfs.cpio.gz\" \
 					-target $(TARGET) \
@@ -131,6 +131,12 @@ snd_driver_vm_images.o: $(LIBVMM)/tools/package_guest_images.S $(SND_DRIVER_VM_D
 
 snd_driver_vmm.elf: snd_driver_vmm.o snd_driver_vm_images.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+snd_driver_init.o: $(LINUX_TOOLS_DIR)/snd/snd_driver_init.c
+	$(CC_USERLEVEL) -c $(CFLAGS_USERLEVEL) -target aarch64-linux-musl $< -o $@
+
+snd_driver_init: snd_driver_init.o
+	$(CC_USERLEVEL) $(CFLAGS_USERLEVEL) $^ -o $@
 
 user_sound/%.o: $(SND_UIO_DRIVERS_DIR)/%.c
 	mkdir -p user_sound
