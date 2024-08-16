@@ -8,6 +8,7 @@
 #include "stream.h"
 #include <libvmm/util/atomic.h>
 #include <uio/sound.h>
+#include <uio/init.h>
 #include <sddf/sound/queue.h>
 #include <assert.h>
 #include <stdio.h>
@@ -37,6 +38,9 @@
 #define PCM_DATA_ADDR UIO_ADDR("2")
 #define PCM_DATA_SIZE UIO_SIZE("2")
 
+#define ALSACTL_PROGRAM_PATH "/alsactl"
+#define ALSACTL_EXIT_SUCCESS 99
+
 typedef struct driver_state {
     stream_t *streams[MAX_STREAMS];
     int stream_count;
@@ -47,6 +51,8 @@ typedef struct driver_state {
 
     char *signal_addr;
 } driver_state_t;
+
+static char *alsactl_args[] = {"alsactl", "init", "-U", "-i", "/alsa/init/00main", NULL};
 
 static void signal_ready_to_vmm(char *signal_addr)
 {
@@ -217,7 +223,19 @@ static bool handle_uio_interrupt(driver_state_t *state)
 
 int main(int argc, char **argv)
 {
-    system("alsactl init -U");
+    int status = spawn_process_and_wait(ALSACTL_PROGRAM_PATH, alsactl_args, execv);
+    if (status == -1) {
+        LOG_SOUND_ERR("Failed to start process for %s: %s\n", alsactl_args[0], strerror(errno));
+        return EXIT_FAILURE;
+    } else if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status) != ALSACTL_EXIT_SUCCESS) {
+            LOG_SOUND_ERR("%s exited with status %d: %s\n", alsactl_args[0], WEXITSTATUS(status), strerror(errno));
+            return EXIT_FAILURE;
+        }
+    } else {
+        LOG_SOUND_ERR("%s did not exit normally\n", alsactl_args[0]);
+        return EXIT_FAILURE;
+    }
 
     LOG_SOUND("Starting sound driver\n");
 

@@ -18,14 +18,9 @@
 #define LOG_UIO_SND_INIT_ERR(...) do{ printf("UIO_SND_DRIVER_INIT"); printf("|ERROR: "); printf(__VA_ARGS__); }while(0)
 
 #define ALSA_CONFIG_DIR "/alsa"
-#define ALSACTL_PROGRAM_PATH "/alsactl"
-#define ALSACTL_EXIT_SUCCESS 99
 #define UIO_SND_DRIVER_LOGFILE "/user_sound"
 #define UIO_SND_DRIVER_PROGRAM_PATH "/root/uio_snd_driver"
-
 #define NUM_VIRTIO_MODULES 18
-
-static char *alsactl_args[] = {"alsactl", "init", "-U", "-i", "/alsa/init/00main", NULL};
 
 static const char *module_paths[] = {
     "/modules/nls_base.ko", "/modules/soundcore.ko", "/modules/snd-intel-dspcfg.ko",
@@ -61,7 +56,8 @@ static bool init_mounts()
     return true;
 }
 
-static int exec_uio_snd_driver(const char *program, char *const *program_args) {
+static int exec_uio_snd_driver(const char *program, char *const *program_args)
+{
     int fd = open(UIO_SND_DRIVER_LOGFILE, O_WRONLY | O_CREAT | O_APPEND);
     if (fd < 0) {
         LOG_UIO_SND_INIT_ERR("Failed to open log file\n");
@@ -87,11 +83,13 @@ static int exec_uio_snd_driver(const char *program, char *const *program_args) {
         return EXIT_FAILURE;
     }
 
+    sleep(1);
     execv(program, program_args);
     return EXIT_FAILURE;
 }
 
-int main() {
+int main()
+{
     if (getpid() != 1) {
         LOG_UIO_SND_INIT_ERR("init is not running as pid 1");
         shutdown();
@@ -119,23 +117,8 @@ int main() {
         }
     }
 
-    sleep(1);
-    int status = spawn_process_and_wait(ALSACTL_PROGRAM_PATH, alsactl_args, execv);
-    if (status == -1) {
-        LOG_UIO_SND_INIT_ERR("Failed to start process for %s: %s\n", alsactl_args[0], strerror(errno));
-        shutdown();
-    } else if (WIFEXITED(status)) {
-        LOG_UIO_SND_INIT("%s exited with status %d\n", alsactl_args[0], WEXITSTATUS(status));
-        if (WEXITSTATUS(status) != ALSACTL_EXIT_SUCCESS) {
-            shutdown();
-        }
-    } else {
-        LOG_UIO_SND_INIT_ERR("%s did not exit normally\n", alsactl_args[0]);
-        shutdown();
-    }
-
     // Create a new process for the uio driver and wait for it to finish.
-    status = spawn_process_and_wait(UIO_SND_DRIVER_PROGRAM_PATH, uio_snd_driver_args, exec_uio_snd_driver);
+    int status = spawn_process_and_wait(UIO_SND_DRIVER_PROGRAM_PATH, uio_snd_driver_args, exec_uio_snd_driver);
     if (status == -1) {
         LOG_UIO_SND_INIT_ERR("Failed to start process for %s: %s\n", uio_snd_driver_args[0], strerror(errno));
     } else if (WIFEXITED(status)) {
