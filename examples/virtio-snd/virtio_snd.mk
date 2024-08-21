@@ -71,7 +71,7 @@ include $(LIBVMM)/vmm.mk
 include $(LIBVMM_TOOLS)/linux/snd/sound_init.mk
 include $(LIBVMM_TOOLS)/linux/uio_drivers/snd/uio_snd.mk
 
-IMAGES := client_vmm.elf snd_driver_vmm.elf \
+IMAGES := snd_driver_vmm.elf benchmark.elf idle.elf native_client.elf \
 	$(SERIAL_IMAGES) $(SND_IMAGES) uart_driver.elf
 
 CHECK_FLAGS_BOARD_MD5:=.board_cflags-$(shell echo -- $(CFLAGS) $(BOARD) $(MICROKIT_CONFIG) | shasum | sed 's/ *-//')
@@ -96,8 +96,23 @@ $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) $(SYSTEM_FILE)
 %_vm:
 	mkdir -p $@
 
-client_vm/rootfs.cpio.gz: $(SYSTEM_DIR)/client_vm/rootfs.cpio.gz |client_vm
-	cp $< $@
+benchmark.o: $(VIRTIO_EXAMPLE)/benchmark.c $(CHECK_FLAGS_BOARD_MD5)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+benchmark.elf: benchmark.o libsddf_util.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+idle.o: $(VIRTIO_EXAMPLE)/idle.c $(CHECK_FLAGS_BOARD_MD5)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+idle.elf: idle.o
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+native_client.o: $(VIRTIO_EXAMPLE)/native_client.c $(CHECK_FLAGS_BOARD_MD5)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+native_client.elf: native_client.o libsddf_util.a
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 snd_driver_vm/rootfs.cpio.gz: $(SYSTEM_DIR)/snd_driver_vm/rootfs.cpio.gz \
 	$(SND_DRIVER_VM_USERLEVEL) $(SND_DRIVER_VM_USERLEVEL_INIT) |snd_driver_vm
