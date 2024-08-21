@@ -33,9 +33,9 @@
 #define SERIAL_CONSOLE_BEGIN_STRING "Begin input\n"
 #define SERIAL_CONSOLE_BEGIN_STRING_LEN 13
 
-#define SERIAL_CLI0_NAME "CLIENT_VMM_1"
-#define SERIAL_CLI1_NAME "CLIENT_VMM_2"
-#define SERIAL_CLI2_NAME "SND_DRIVER_VMM"
+#define SERIAL_CLI0_NAME "bench"
+#define SERIAL_CLI1_NAME "SND_DRIVER_VMM"
+#define SERIAL_CLI2_NAME "native_client"
 #define SERIAL_VIRT_RX_NAME "serial_virt_rx"
 #define SERIAL_VIRT_TX_NAME "serial_virt_tx"
 #define SERIAL_DRIVER_NAME "uart_driver"
