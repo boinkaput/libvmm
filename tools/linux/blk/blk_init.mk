@@ -28,7 +28,7 @@ $(CHECK_UIO_BLK_DRIVER_INIT_FLAGS_MD5):
 blk_client_init: $(LIBVMM)/tools/linux/blk/blk_client_init
 	cp $^ $@
 
-blk_driver_init: blk_driver_init.o libuio.a
+blk_driver_init: blk_driver_init.o init.o
 	$(CC_USERLEVEL) $(CFLAGS_USERLEVEL) $(CFLAGS_uio_blk_driver_init) $^ -o $@
 
 blk_driver_init.o: $(CHECK_UIO_BLK_DRIVER_INIT_FLAGS_MD5)

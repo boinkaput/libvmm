@@ -27,7 +27,7 @@ $(CHECK_UIO_SND_DRIVER_INIT_FLAGS_MD5):
 asound.conf: $(LIBVMM)/tools/linux/snd/board/$(MICROKIT_BOARD)/asound.conf
 	cp $^ $@
 
-snd_driver_init: snd_driver_init.o libuio.a
+snd_driver_init: snd_driver_init.o init.o
 	$(CC_USERLEVEL) $(CFLAGS_USERLEVEL) $(CFLAGS_uio_snd_driver_init) $^ -o $@
 
 snd_driver_init.o: $(CHECK_UIO_SND_DRIVER_INIT_FLAGS_MD5)

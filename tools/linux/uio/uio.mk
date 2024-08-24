@@ -27,7 +27,7 @@ $(CHECK_LIBUIO_FLAGS_MD5):
 	touch $@
 
 
-libuio.a: libuio.o init.o
+libuio.a: libuio.o
 	ar rv $@ $^
 
 libuio.o: $(CHECK_LIBUIO_FLAGS_MD5)

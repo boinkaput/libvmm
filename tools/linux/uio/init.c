@@ -1,8 +1,37 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
+#include <syscall.h>
+#include <unistd.h>
+#include <sys/mount.h>
 #include <sys/reboot.h>
-#include <sys/syscall.h>
 #include <uio/init.h>
+
+static void shutdown(void)
+{
+    LOG_UIO_INIT("Shutting down...\n");
+    reboot(RB_POWER_OFF);
+}
+
+static bool init_mounts()
+{
+    LOG_UIO_INIT("Mounting devtmpfs to /dev of type devtmpfs\n");
+    int err = mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
+    if (err < 0) {
+        LOG_UIO_INIT_ERR("Failed to mount devtmpfs on /dev: %s\n", strerror(errno));
+        return false;
+    }
+
+    LOG_UIO_INIT("Mounting sysfs to /sys of type sysfs\n");
+    err = mount("sysfs", "/sys", "sysfs", 0, NULL);
+    if (err < 0) {
+        LOG_UIO_INIT_ERR("Failed to mount sysfs on /sys: %s\n", strerror(errno));
+        return false;
+    }
+
+    return true;
+}
 
 bool insmod(const char *module_path)
 {
@@ -25,28 +54,28 @@ bool insmod(const char *module_path)
     return true;
 }
 
-int spawn_process_and_wait(const char *program, char *const *program_args,
-                           int (*child_fn)(const char *, char *const *))
+int main()
 {
-    pid_t pid = fork();
-    if (pid < 0) {
-        return -1;
-    } else if (pid == 0) {
-        int exit_status = child_fn(program, program_args);
-        exit(exit_status);
-    } else {
-        int status;
-        if (waitpid(pid, &status, 0) < 0) {
-            return -1;
-        }
-        return status;
+    if (getpid() != 1) {
+        LOG_UIO_INIT_ERR("init is not running as pid 1\n");
+        shutdown();
     }
-}
 
-void shutdown(void)
-{
-    reboot(RB_POWER_OFF);
-    while(1) {
-        sleep(1);
+    if (chdir("/")) {
+        LOG_UIO_INIT_ERR("Failed to cd to \'/\': %s\n", strerror(errno));
+        shutdown();
     }
+
+    if (!load_modules()) {
+        shutdown();
+    }
+
+    if (!init_mounts()) {
+        shutdown();
+    }
+
+    init_main();
+    shutdown();
+
+    return EXIT_FAILURE;
 }

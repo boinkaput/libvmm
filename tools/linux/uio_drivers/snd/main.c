@@ -8,13 +8,13 @@
 #include "stream.h"
 #include <libvmm/util/atomic.h>
 #include <uio/sound.h>
-#include <uio/init.h>
 #include <sddf/sound/queue.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 // Used for mapping in UIO devices
 #define PAGE_SIZE_4K 0x1000
@@ -221,19 +221,38 @@ static bool handle_uio_interrupt(driver_state_t *state)
     return notify_client;
 }
 
+bool start_alsactl(void)
+{
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOG_SOUND_ERR("Failed to fork: %s\n", strerror(errno));
+        return false;
+    } else if (pid == 0) {
+        execv(ALSACTL_PROGRAM_PATH, alsactl_args);
+        LOG_SOUND_ERR("Failed to start alsactl: %s\n", strerror(errno));
+        return false;
+    } else {
+        int status;
+        if (waitpid(pid, &status, 0) < 0) {
+            return false;
+        }
+
+        if (!WIFEXITED(status)) {
+            LOG_SOUND_ERR("alsactl did not exit normally\n");
+            return false;
+        }
+
+        if (WEXITSTATUS(status) != ALSACTL_EXIT_SUCCESS) {
+            LOG_SOUND_ERR("alsactl exited with status %d: %s\n", WEXITSTATUS(status), strerror(errno));
+            return false;
+        }
+    }
+    return true;
+}
+
 int main(int argc, char **argv)
 {
-    int status = spawn_process_and_wait(ALSACTL_PROGRAM_PATH, alsactl_args, execv);
-    if (status == -1) {
-        LOG_SOUND_ERR("Failed to start process for %s: %s\n", alsactl_args[0], strerror(errno));
-        return EXIT_FAILURE;
-    } else if (WIFEXITED(status)) {
-        if (WEXITSTATUS(status) != ALSACTL_EXIT_SUCCESS) {
-            LOG_SOUND_ERR("%s exited with status %d: %s\n", alsactl_args[0], WEXITSTATUS(status), strerror(errno));
-            return EXIT_FAILURE;
-        }
-    } else {
-        LOG_SOUND_ERR("%s did not exit normally\n", alsactl_args[0]);
+    if (!start_alsactl()) {
         return EXIT_FAILURE;
     }
 
