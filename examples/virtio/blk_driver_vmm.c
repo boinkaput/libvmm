@@ -12,6 +12,7 @@
 #include <libvmm/virtio/virtio.h>
 #include <libvmm/arch/aarch64/linux.h>
 #include <libvmm/arch/aarch64/fault.h>
+#include <libvmm/arch/aarch64/hsr.h>
 #include <sddf/serial/queue.h>
 #include <serial_config.h>
 
@@ -65,6 +66,7 @@ char *serial_rx_data;
 char *serial_tx_data;
 
 static struct virtio_console_device virtio_console;
+static bool suspended;
 
 void uio_ack(size_t vcpu_id, int irq, void *cookie)
 {
@@ -133,15 +135,20 @@ void init(void)
     virq_register_passthrough(GUEST_VCPU_ID, BLOCK_IRQ, BLOCK_CH);
 #endif
 
+    suspended = false;
+
     /* Finally start the guest */
     guest_start(GUEST_VCPU_ID, kernel_pc, GUEST_DTB_VADDR, GUEST_INIT_RAM_DISK_VADDR);
 }
 
 void notified(microkit_channel ch)
 {
-    bool handled = false;
+    if (suspended) {
+        microkit_vcpu_resume(GUEST_VCPU_ID);
+        suspended = false;
+    }
 
-    handled = virq_handle_passthrough(ch);
+    bool handled = virq_handle_passthrough(ch);
 
     switch (ch) {
     case UIO_CH: {
@@ -165,6 +172,15 @@ void notified(microkit_channel ch)
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo) {
     bool success = fault_handle(child, msginfo);
     if (success) {
+        size_t label = microkit_msginfo_get_label(msginfo);
+        if (label == seL4_Fault_VCPUFault) {
+            uint64_t hsr_ec_class = HSR_EXCEPTION_CLASS(microkit_mr_get(seL4_VCPUFault_HSR));
+            if (hsr_ec_class == HSR_WFx_EXCEPTION) {
+                microkit_vcpu_stop(GUEST_VCPU_ID);
+                suspended = true;
+            }
+        }
+
         /* Now that we have handled the fault successfully, we reply to it so
          * that the guest can resume execution. */
         *reply_msginfo = microkit_msginfo_new(0, 0);
