@@ -28,7 +28,7 @@
 #define GUEST_RAM_SIZE 0x1400000
 
 #if defined(BOARD_qemu_virt_aarch64)
-#define GUEST_DTB_VADDR 0x40600000
+#define GUEST_DTB_VADDR 0x405ff288
 #define GUEST_INIT_RAM_DISK_VADDR 0x40400000
 #elif defined(BOARD_odroidc4)
 #define GUEST_DTB_VADDR 0x27000000
@@ -46,8 +46,6 @@ extern char _guest_dtb_image_end[];
 /* Data for the initial RAM disk to be passed to the kernel. */
 extern char _guest_initrd_image[];
 extern char _guest_initrd_image_end[];
-/* Microkit will set this variable to the start of the guest RAM memory region. */
-uintptr_t guest_ram_vaddr;
 
 #define SND_CLIENT_CH 4
 
@@ -63,6 +61,18 @@ int passthrough_irq_map[MAX_IRQ_CH];
 #define VIRTIO_CONSOLE_BASE (0x130000)
 #define VIRTIO_CONSOLE_SIZE (0x1000)
 
+#define KERNEL_IMAGE_SIZE 0x400000
+#define PAGE_SIZE 4096
+#define PAGE_ALIGN(vaddr) ((vaddr) & ~(PAGE_SIZE - 1))
+
+#define IS_INSTRUCTION_ABORT(fsr) (((fsr) >> 26) == 0b100000)
+#define IS_LEVEL3_FAULT(fsr) (((fsr) & 0b11) == 0b11)
+#define IS_TRANSLATION_FAULT(fsr) ((((fsr) >> 2) & 0b1) == 0b1)
+#define IS_PERMISSION_FAULT(fsr) ((((fsr) >> 2) & 0b11) == 0b11)
+
+/* Microkit will set this variable to the start of the guest RAM memory region. */
+uintptr_t driver_vm_kernel_vaddr;
+
 serial_queue_t *serial_rx_queue;
 serial_queue_t *serial_tx_queue;
 
@@ -71,6 +81,12 @@ char *serial_tx_data;
 
 uintptr_t sound_shared_state;
 uintptr_t sound_data_paddr;
+
+seL4_CPtr driver_vm_kernel_page_cap;
+seL4_CPtr snd_driver_vm_ram_page_cap;
+seL4_CPtr zero_page_cap;
+
+seL4_CPtr base_free_slot;
 
 static struct virtio_console_device virtio_console;
 static bool suspended;
@@ -101,6 +117,97 @@ static bool uio_sound_fault_handler(size_t vcpu_id,
     return true;
 }
 
+static bool guest_kernel_mem_fault_handler(size_t vcpu_id, size_t offset, size_t fsr,
+                                           seL4_UserContext *regs, void *data)
+{
+    if (!IS_LEVEL3_FAULT(fsr)) {
+        LOG_VMM_ERR("invalid page fault level: must be a level 3 fault\n");
+        return false;
+    }
+
+    if (!IS_TRANSLATION_FAULT(fsr) && !IS_PERMISSION_FAULT(fsr)) {
+        LOG_VMM_ERR("invalid page fault kind: must be either a translation or permission fault\n");
+        return false;
+    }
+
+    seL4_CapRights_t rights;
+    seL4_ARM_VMAttributes attr;
+    if (IS_INSTRUCTION_ABORT(fsr)) {
+        rights = seL4_CanRead;
+        attr = seL4_ARM_Default_VMAttributes;
+    } else {
+        rights = fault_is_write(fsr) ? seL4_ReadWrite : seL4_CanRead;
+        attr = seL4_ARM_Default_VMAttributes | seL4_ARM_ExecuteNever;
+    }
+
+    seL4_Error err = seL4_ARM_Page_Map(driver_vm_kernel_page_cap + (offset / PAGE_SIZE), VM_VSPACE_CAP,
+                                       PAGE_ALIGN(driver_vm_kernel_vaddr + offset), rights, attr);
+    if (err != seL4_NoError) {
+        LOG_VMM_ERR("failed to map frame to client's vspace: %d\n", err);
+        return false;
+    }
+
+    // fault_advance_vcpu increments the pc by 4. After handling the fault,
+    // we need to re-execute the same instruction.
+    regs->pc -= 4;
+
+    return true;
+}
+
+static bool guest_mem_fault_handler(size_t vcpu_id, size_t offset, size_t fsr,
+                                    seL4_UserContext *regs, void *data)
+{
+    if (!IS_LEVEL3_FAULT(fsr)) {
+        LOG_VMM_ERR("invalid page fault level: must be a level 3 fault\n");
+        return false;
+    }
+
+    if (!IS_TRANSLATION_FAULT(fsr) && !IS_PERMISSION_FAULT(fsr)) {
+        LOG_VMM_ERR("invalid page fault kind: must be either a translation or permission fault\n");
+        return false;
+    }
+
+    if (!IS_PERMISSION_FAULT(fsr)) {
+        num_mappings++;
+    }
+
+    seL4_CPtr page_slot;
+    seL4_CapRights_t rights;
+    seL4_ARM_VMAttributes attr;
+    if (IS_INSTRUCTION_ABORT(fsr)) {
+        page_slot = snd_driver_vm_ram_page_cap + (offset / PAGE_SIZE);
+        rights = seL4_CanRead;
+        attr = seL4_ARM_Default_VMAttributes;
+    } else {
+        if (fault_is_write(fsr)) {
+            page_slot = snd_driver_vm_ram_page_cap + (offset / PAGE_SIZE);
+            rights = seL4_ReadWrite;
+        } else {
+            page_slot = base_free_slot + (offset / PAGE_SIZE);
+            seL4_Error err = seL4_CNode_Copy(PD_ROOT_CNODE_CAP, page_slot, PD_CNODE_DEPTH,
+                                             PD_ROOT_CNODE_CAP, zero_page_cap, PD_CNODE_DEPTH,
+                                             rights);
+            assert(err == seL4_NoError);
+            rights = seL4_CanRead;
+        }
+        attr = seL4_ARM_Default_VMAttributes | seL4_ARM_ExecuteNever;
+    }
+
+    seL4_Error err = seL4_ARM_Page_Map(page_slot, VM_VSPACE_CAP,
+                                       PAGE_ALIGN(0x40600000 + offset),
+                                       rights, attr);
+    if (err != seL4_NoError) {
+        LOG_VMM_ERR("failed to map frame to client's vspace: %d\n", err);
+        return false;
+    }
+
+    // fault_advance_vcpu increments the pc by 4. After handling the fault,
+    // we need to re-execute the same instruction.
+    regs->pc -= 4;
+
+    return true;
+}
+
 static void uio_sound_virq_ack(size_t vcpu_id, int irq, void *cookie) {}
 
 void init(void) {
@@ -111,7 +218,7 @@ void init(void) {
     size_t dtb_size = _guest_dtb_image_end - _guest_dtb_image;
     size_t initrd_size = _guest_initrd_image_end - _guest_initrd_image;
 
-    uintptr_t kernel_pc = linux_setup_images(guest_ram_vaddr,
+    uintptr_t kernel_pc = linux_setup_images(driver_vm_kernel_vaddr,
                                       (uintptr_t) _guest_kernel_image,
                                       kernel_size,
                                       (uintptr_t) _guest_dtb_image,
@@ -157,6 +264,14 @@ void init(void) {
     success = fault_register_vm_exception_handler(UIO_SND_FAULT_ADDRESS,
                                                   sizeof(size_t),
                                                   &uio_sound_fault_handler, NULL);
+    assert(success);
+
+    success = fault_register_vm_exception_handler(driver_vm_kernel_vaddr, KERNEL_IMAGE_SIZE,
+                                                  guest_kernel_mem_fault_handler, NULL);
+    assert(success);
+
+    success = fault_register_vm_exception_handler(0x40600000, 0xe00000,
+                                                  guest_mem_fault_handler, NULL);
     assert(success);
 
 #if defined(BOARD_qemu_virt_aarch64)

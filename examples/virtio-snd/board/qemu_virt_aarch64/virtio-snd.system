@@ -5,7 +5,11 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="snd_driver_vm_ram" size="0x1_400_000" page_size="0x200_000" phys_addr="0x40000000"/>
+    <memory_region name="driver_vm_kernel" size="0x400_000" page_size="0x1_000" phys_addr="0x40000000" />
+    <memory_region name="driver_vm_images" size="0x200_000" page_size="0x200_000" phys_addr="0x40400000" />
+    <memory_region name="snd_driver_vm_ram" size="0xe00_000" page_size="0x1_000" phys_addr="0x40600000" />
+    <memory_region name="zero_frame" size="0x1_000" page_size="0x1_000" />
+
     <memory_region name="client_vm_ram_1"   size="0x8_000_000" page_size="0x200_000" />
     <memory_region name="client_vm_ram_2"   size="0x8_000_000" page_size="0x200_000" />
     <memory_region name="uart"              size="0x1_000" phys_addr="0x9000000" />
@@ -110,7 +114,15 @@
 
     <protection_domain name="SND_DRIVER_VMM" priority="110">
         <program_image path="snd_driver_vmm.elf" />
-        <map mr="snd_driver_vm_ram" vaddr="0x40000000" perms="rw" setvar_vaddr="guest_ram_vaddr" />
+        <map mr="driver_vm_kernel" vaddr="0x40000000" perms="rw" setvar_vaddr="driver_vm_kernel_vaddr" />
+        <map mr="driver_vm_images" vaddr="0x40400000" perms="rw" />
+        <map mr="snd_driver_vm_ram" vaddr="0x40600000" perms="rw" />
+
+        <assign_frames mr="driver_vm_kernel" setvar_capaddr="driver_vm_kernel_page_cap" />
+        <assign_frames mr="snd_driver_vm_ram" setvar_capaddr="snd_driver_vm_ram_page_cap" />
+        <assign_frames mr="zero_frame" setvar_capaddr="zero_page_cap" />
+
+        <allocate_cap_slots num_caps="3584" setvar_capaddr="base_free_slot" />
 
         <map mr="tx_queue_serial_vmm_3" vaddr="0x6_000_000" perms="rw" cached="true" setvar_vaddr="serial_tx_queue" />
         <map mr="rx_queue_serial_vmm_3" vaddr="0x6_001_000" perms="rw" cached="true" setvar_vaddr="serial_rx_queue" />
@@ -120,11 +132,14 @@
         <setvar symbol="sound_data_paddr" region_paddr="snd_data" />
         <map mr="snd_shared" vaddr="0x12_000_000" perms="rw" cached="false" setvar_vaddr="sound_shared_state" />
 
-        <virtual_machine name="snd_linux" priority="105">
+        <virtual_machine name="snd_linux" priority="105" assign_vspace="true">
             <vcpu id="0" />
-            <map mr="snd_driver_vm_ram" vaddr="0x40000000" perms="rwx" />
-            <map mr="gic_vcpu" vaddr="0x8010000" perms="rw" cached="false" />
 
+            <map_paging_structures vaddr="0x40000000" size="0x400_000" page_size="0x1000" />
+            <map mr="driver_vm_images" vaddr="0x40400000" perms="rwx" />
+            <map_paging_structures vaddr="0x40600000" size="0xe00_000" page_size="0x1000" />
+
+            <map mr="gic_vcpu" vaddr="0x8010000" perms="rw" cached="false" />
             <map mr="pcie_reg"       vaddr="0x40_10000000" perms="rw" cached="false" />
             <map mr="pcie_io_mem"    vaddr="0x00_3eff0000" perms="rw" cached="false" />
             <map mr="pcie_32bit_mem" vaddr="0x00_10000000" perms="rw" cached="false" />
